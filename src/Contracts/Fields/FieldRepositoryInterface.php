@@ -13,4 +13,24 @@
  *
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
- */
+*/
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Contracts\Fields;
+
+use Setka\Cms\Domain\Fields\Field;
+
+interface FieldRepositoryInterface
+{
+    public function findById(int $id): ?Field;
+
+    public function findByHandle(string $handle): ?Field;
+
+    /**
+     * Persist field. Inserts when id is null, otherwise updates.
+     */
+    public function save(Field $field): void;
+
+    public function delete(int $id): void;
+}

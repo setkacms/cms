@@ -13,4 +13,24 @@
  *
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
- */
+*/
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Contracts\Elements;
+
+use Setka\Cms\Domain\Elements\Element;
+
+interface ElementRepositoryInterface
+{
+    public function findById(int $id): ?Element;
+
+    public function findByUid(string $uid): ?Element;
+
+    /**
+     * Persist element. Inserts when id is null, otherwise updates.
+     */
+    public function save(Element $element): void;
+
+    public function delete(int $id): void;
+}

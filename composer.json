@@ -1,105 +1,113 @@
 {
-  "name": "setkacms/cms",
-  "type": "library",
-  "description": "Setka CMS core (Yii2)",
-  "keywords": ["cms", "yii2", "setka", "setkacms"],
-  "homepage": "https://github.com/setkacms/cms",
-  "license": "proprietary",
-  "authors": [
-    { "name": "Vitaliy Kamelin", "email": "vkamelin@gmail.com" }
-  ],
-  "support": {
-    "issues": "https://github.com/setkacms/cms/issues",
-    "source": "https://github.com/setkacms/cms",
-    "docs": "https://github.com/setkacms/cms/wiki",
-    "rss": "https://github.com/setkacms/cms/releases.atom"
-  },
-
-  "repositories": [
-    {
-      "type": "composer",
-      "url": "https://asset-packagist.org"
-    }
-  ],
-
-  "require": {
-    "php": "^8.2",
-    "ext-json": "*",
-    "ext-mbstring": "*",
-    "ext-intl": "*",
-    "ext-pdo": "*",
-    "ext-ctype": "*",
-    "yiisoft/yii2": "^2.0.49",
-    "guzzlehttp/guzzle": "^7.9",
-    "twig/twig": "^3.15",
-    "webonyx/graphql-php": "^15.0",
-    "monolog/monolog": "^3.7",
-    "symfony/yaml": "^6.4 || ^7.0"
-  },
-
-  "require-dev": {
-    "phpunit/phpunit": "^10.5",
-    "phpstan/phpstan": "^1.11",
-    "friendsofphp/php-cs-fixer": "^3.58",
-    "rector/rector": "^1.2",
-    "fakerphp/faker": "^1.23",
-    "vlucas/phpdotenv": "^5.6",
-    "yiisoft/yii2-debug": "^2.1"
-  },
-
-  "suggest": {
-    "ext-zip": "Архивы/импорт-экспорт",
-    "ext-gd": "Базовая обработка изображений",
-    "ext-imagick": "Расширенная обработка изображений",
-    "yiisoft/yii2-redis": "Кэш/очереди/сессии в Redis",
-    "yiisoft/yii2-queue": "Очереди задач"
-  },
-
-  "provide": {
-    "psr/log-implementation": "3.0.0"
-  },
-
-  "autoload": {
-    "psr-4": {
-      "Setka\\Cms\\": "src/"
+    "name": "setkacms/cms",
+    "type": "library",
+    "description": "Setka CMS core (Yii2)",
+    "keywords": [
+        "cms",
+        "yii2",
+        "setka",
+        "setkacms"
+    ],
+    "homepage": "https://github.com/setkacms/cms",
+    "license": "proprietary",
+    "authors": [
+        {
+            "name": "Vitaliy Kamelin",
+            "email": "vkamelin@gmail.com"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/setkacms/cms/issues",
+        "source": "https://github.com/setkacms/cms",
+        "docs": "https://github.com/setkacms/cms/wiki",
+        "rss": "https://github.com/setkacms/cms/releases.atom"
     },
-    "files": [
-      "src/Support/helpers.php"
-    ]
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Setka\\Cms\\Tests\\": "tests/"
-    }
-  },
-
-  "bin": [
-    "bin/setka"
-  ],
-
-  "scripts": {
-    "cs": "php-cs-fixer fix --ansi --diff --verbose",
-    "stan": "phpstan analyse --memory-limit=1G",
-    "rector": "rector",
-    "test": "phpunit --colors=always"
-  },
-
-  "config": {
-    "sort-packages": true,
-    "platform": { "php": "8.2" },
-    "platform-check": false,
-    "allow-plugins": {
-      "yiisoft/yii2-composer": true
-    }
-  },
-
-  "extra": {
-    "branch-alias": {
-      "dev-main": "1.x-dev"
+    "repositories": [
+        {
+            "type": "composer",
+            "url": "https://asset-packagist.org"
+        }
+    ],
+    "require": {
+        "php": "^8.2",
+        "ext-ctype": "*",
+        "ext-intl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "codeception/codeception": "^5.3",
+        "codeception/module-yii2": "^1.1",
+        "creocoder/yii2-flysystem": "^1.2",
+        "guzzlehttp/guzzle": "^7.9",
+        "monolog/monolog": "^3.7",
+        "symfony/yaml": "^6.4 || ^7.0",
+        "twig/twig": "^3.15",
+        "webonyx/graphql-php": "^15.24",
+        "yii2mod/yii2-rbac": "^2.3",
+        "yiisoft/yii2": "^2.0.49",
+        "yiisoft/yii2-authclient": "^2.2",
+        "yiisoft/yii2-imagine": "^2.3",
+        "yiisoft/yii2-queue": "^2.3",
+        "yiisoft/yii2-redis": "^2.0"
     },
-    "setka": {
-      "plugin-type": "setka-plugin",
-      "plugin-meta-key": "setka.plugin.class"
+    "require-dev": {
+        "phpunit/phpunit": "^10.5",
+        "phpstan/phpstan": "^1.11",
+        "friendsofphp/php-cs-fixer": "^3.58",
+        "rector/rector": "^1.2",
+        "fakerphp/faker": "^1.23",
+        "vlucas/phpdotenv": "^5.6",
+        "yiisoft/yii2-debug": "^2.1"
+    },
+    "suggest": {
+        "ext-zip": "Архивы/импорт-экспорт",
+        "ext-gd": "Базовая обработка изображений",
+        "ext-imagick": "Расширенная обработка изображений",
+        "yiisoft/yii2-redis": "Кэш/очереди/сессии в Redis",
+        "yiisoft/yii2-queue": "Очереди задач"
+    },
+    "provide": {
+        "psr/log-implementation": "3.0.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Setka\\Cms\\": "src/"
+        },
+        "files": [
+            "src/Support/helpers.php"
+        ]
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Setka\\Cms\\Tests\\": "tests/"
+        }
+    },
+    "bin": [
+        "bin/setka"
+    ],
+    "scripts": {
+        "cs": "php-cs-fixer fix --ansi --diff --verbose",
+        "stan": "phpstan analyse --memory-limit=1G",
+        "rector": "rector",
+        "test": "phpunit --colors=always"
+    },
+    "config": {
+        "sort-packages": true,
+        "platform": {
+            "php": "8.2"
+        },
+        "platform-check": false,
+        "allow-plugins": {
+            "yiisoft/yii2-composer": true
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "1.x-dev"
+        },
+        "setka": {
+            "plugin-type": "setka-plugin",
+            "plugin-meta-key": "setka.plugin.class"
+        }
     }
-  }
 }

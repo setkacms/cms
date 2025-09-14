@@ -6,7 +6,7 @@
 namespace Setka\Cms\Http\Api\GraphQL\Controllers;
 
 use GraphQL\GraphQL as GraphQLRunner;
-use Setka\Cms\Http\Api\GraphQL\Schema\SchemaFactory;
+use GraphQL\Schema;
 use yii\filters\Cors;
 use yii\web\BadRequestHttpException;
 use yii\web\Controller;
@@ -28,7 +28,7 @@ class GraphqlController extends Controller
         \Yii::$app->response->format = Response::FORMAT_JSON;
 
         $request = \Yii::$app->request;
-        $schema = SchemaFactory::create();
+        $schema = \Yii::$container->get(Schema::class);
 
         if ($request->isGet) {
             $query = $request->get('query', '{ ping }');

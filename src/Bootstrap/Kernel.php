@@ -21,9 +21,11 @@ use Setka\Cms\Bootstrap\Providers\CacheProvider;
 use Setka\Cms\Bootstrap\Providers\DatabaseProvider;
 use Setka\Cms\Bootstrap\Providers\EventProvider;
 use Setka\Cms\Bootstrap\Providers\ProviderInterface;
+use yii\base\Application as YiiApplication;
+use yii\base\BootstrapInterface;
 use yii\di\Container;
 
-class Kernel
+final class Kernel implements BootstrapInterface
 {
     /**
      * @var class-string<ProviderInterface>[]
@@ -36,6 +38,20 @@ class Kernel
 
     public function __construct(private string $projectRoot)
     {
+    }
+
+    public function bootstrap($app): void
+    {
+        /** @var YiiApplication $app */
+        $c = \Yii::$container;
+        $params = $app->params;
+
+        foreach ($this->providers as $class) {
+            $provider = new $class();
+            $provider->register($c, $params);
+        }
+
+        (new PluginBootstrap($this->projectRoot ?: \Yii::getAlias('@root')))->bootstrap();
     }
 
     public function init(Container $c, array $params): void

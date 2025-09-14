@@ -39,7 +39,8 @@ class Application
      */
     public function run(): void
     {
-        (new Bootstrap\Kernel($this->projectRoot))->bootstrap();
+        $container = \Yii::$container;
+        (new Bootstrap\Kernel($this->projectRoot))->init($container, []);
 
         $config = $this->loadConfig();
 

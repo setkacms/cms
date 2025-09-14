@@ -17,14 +17,34 @@
 
 namespace Setka\Cms\Bootstrap;
 
+use Setka\Cms\Bootstrap\Providers\CacheProvider;
+use Setka\Cms\Bootstrap\Providers\DatabaseProvider;
+use Setka\Cms\Bootstrap\Providers\EventProvider;
+use Setka\Cms\Bootstrap\Providers\ProviderInterface;
+use yii\di\Container;
+
 class Kernel
 {
+    /**
+     * @var class-string<ProviderInterface>[]
+     */
+    private array $providers = [
+        CacheProvider::class,
+        DatabaseProvider::class,
+        EventProvider::class,
+    ];
+
     public function __construct(private string $projectRoot)
     {
     }
 
-    public function bootstrap(): void
+    public function init(Container $c, array $params): void
     {
+        foreach ($this->providers as $class) {
+            $provider = new $class();
+            $provider->register($c, $params);
+        }
+
         (new PluginBootstrap($this->projectRoot))->bootstrap();
     }
 }

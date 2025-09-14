@@ -8,6 +8,8 @@ use Setka\Cms\Http\Dashboard\Module as DashboardModule;
 use Setka\Cms\Http\Front\Module as FrontModule;
 use Setka\Cms\Http\Api\GraphQL\Module as GraphqlModule;
 use yii\rest\UrlRule;
+use yii\authclient\clients\VKontakte;
+use yii\authclient\clients\YandexOAuth;
 
 return [
     'id' => 'setka-web',
@@ -63,4 +65,18 @@ return [
     ],
     // Root route maps to the Front module
     'defaultRoute' => 'front',
+    'params' => [
+        'authClients' => [
+            'vkontakte' => [
+                'class' => VKontakte::class,
+                'clientId' => env('VK_CLIENT_ID', ''),
+                'clientSecret' => env('VK_CLIENT_SECRET', ''),
+            ],
+            'yandex' => [
+                'class' => YandexOAuth::class,
+                'clientId' => env('YANDEX_CLIENT_ID', ''),
+                'clientSecret' => env('YANDEX_CLIENT_SECRET', ''),
+            ],
+        ],
+    ],
 ];

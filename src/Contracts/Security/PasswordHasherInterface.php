@@ -14,3 +14,14 @@
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Contracts\Security;
+
+interface PasswordHasherInterface
+{
+    public function hash(string $password): string;
+
+    public function validate(string $password, string $hash): bool;
+}

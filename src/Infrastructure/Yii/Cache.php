@@ -14,3 +14,68 @@
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Infrastructure\Yii;
+
+use Yii;
+use yii\caching\CacheInterface as YiiCacheInterface;
+use yii\caching\Dependency;
+
+final class Cache implements YiiCacheInterface
+{
+    public function __construct(private readonly ?YiiCacheInterface $cache = null)
+    {
+    }
+
+    public function get($key): mixed
+    {
+        return $this->getCache()->get($key);
+    }
+
+    public function multiGet($keys): array
+    {
+        return $this->getCache()->multiGet($keys);
+    }
+
+    public function set($key, $value, $duration = 0, ?Dependency $dependency = null): bool
+    {
+        return $this->getCache()->set($key, $value, $duration, $dependency);
+    }
+
+    public function multiSet($data, $duration = 0, ?Dependency $dependency = null): bool
+    {
+        return $this->getCache()->multiSet($data, $duration, $dependency);
+    }
+
+    public function add($key, $value, $duration = 0, ?Dependency $dependency = null): bool
+    {
+        return $this->getCache()->add($key, $value, $duration, $dependency);
+    }
+
+    public function multiAdd($data, $duration = 0, ?Dependency $dependency = null): bool
+    {
+        return $this->getCache()->multiAdd($data, $duration, $dependency);
+    }
+
+    public function delete($key): bool
+    {
+        return $this->getCache()->delete($key);
+    }
+
+    public function exists($key): bool
+    {
+        return $this->getCache()->exists($key);
+    }
+
+    public function flush(): bool
+    {
+        return $this->getCache()->flush();
+    }
+
+    private function getCache(): YiiCacheInterface
+    {
+        return $this->cache ?? Yii::$app->cache;
+    }
+}

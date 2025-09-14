@@ -14,3 +14,27 @@
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Infrastructure\Yii;
+
+use yii\base\Event;
+
+final class EventBus
+{
+    public function on(string $name, callable $handler): void
+    {
+        Event::on(self::class, $name, static fn(Event $event): mixed => $handler($event->data));
+    }
+
+    public function off(string $name, ?callable $handler = null): void
+    {
+        Event::off(self::class, $name, $handler);
+    }
+
+    public function trigger(string $name, mixed $payload = null): void
+    {
+        Event::trigger(self::class, $name, new Event(['data' => $payload]));
+    }
+}

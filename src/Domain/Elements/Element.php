@@ -8,9 +8,123 @@
  *
  * @package   Setka CMS
  * @version   1.0.0
- * @author    Vitaliy Kamelin <v.kamelin@gmail.com>
+ * @author    Vitaliy Kamelин <v.kamelин@gmail.com>
  * @license   Proprietary
  *
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+declare(strict_types=1);
+
+namespace Setka\Cms\Domain\Elements;
+
+use DateTimeImmutable;
+use Setka\Cms\Domain\Fields\Field;
+
+/**
+ * Базовый объект контента.
+ */
+class Element
+{
+    private ?int $id;
+
+    private string $uid;
+
+    private Collection $collection;
+
+    /** @var array<string, mixed> */
+    private array $values = [];
+
+    private ?ElementVersion $currentVersion = null;
+
+    private string $status = 'draft';
+
+    private DateTimeImmutable $createdAt;
+
+    private DateTimeImmutable $updatedAt;
+
+    public function __construct(Collection $collection, ?int $id = null, ?string $uid = null)
+    {
+        $this->collection = $collection;
+        $this->id = $id;
+        $this->uid = $uid ?? self::generateUid();
+        $this->createdAt = new DateTimeImmutable();
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    public static function generateUid(): string
+    {
+        return bin2hex(random_bytes(16));
+    }
+
+    public function getId(): ?int
+    {
+        return $this->id;
+    }
+
+    public function getUid(): string
+    {
+        return $this->uid;
+    }
+
+    public function getStatus(): string
+    {
+        return $this->status;
+    }
+
+    public function publish(): void
+    {
+        $this->status = 'published';
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    public function archive(): void
+    {
+        $this->status = 'archived';
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    public function setValue(Field $field, mixed $value): void
+    {
+        $field->validate($value);
+        $this->values[$field->getHandle()] = $value;
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    public function getValue(Field $field): mixed
+    {
+        return $this->values[$field->getHandle()] ?? null;
+    }
+
+    public function validate(): bool
+    {
+        foreach ($this->collection->getFields() as $field) {
+            if ($field->isRequired() && !array_key_exists($field->getHandle(), $this->values)) {
+                return false;
+            }
+
+            if (array_key_exists($field->getHandle(), $this->values)) {
+                $field->validate($this->values[$field->getHandle()]);
+            }
+        }
+
+        return true;
+    }
+
+    /** @return array<string, mixed> */
+    public function getValues(): array
+    {
+        return $this->values;
+    }
+
+    public function getCreatedAt(): DateTimeImmutable
+    {
+        return $this->createdAt;
+    }
+
+    public function getUpdatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+}

@@ -14,3 +14,40 @@
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+namespace Setka\Cms\Console\Controllers;
+
+use Yii;
+use yii\console\Controller;
+use yii\console\ExitCode;
+
+/**
+ * Команды для первоначальной установки системы.
+ */
+class InstallController extends Controller
+{
+    /**
+     * Запускает все миграции ядра и создаёт учётную запись администратора.
+     */
+    public function actionIndex(): int
+    {
+        $this->stdout("Running core migrations...\n");
+        Yii::$app->runAction('migrate/up', ['interactive' => 0]);
+
+        $this->stdout("Creating administrator account...\n");
+        $username = $this->prompt('Username:');
+        $email = $this->prompt('Email:');
+        $password = $this->prompt('Password:');
+
+        Yii::$app->runAction('user/create', [
+            'username' => $username,
+            'password' => $password,
+            'email' => $email,
+            'role' => 'admin',
+        ]);
+
+        $this->stdout("Installation completed.\n");
+        return ExitCode::OK;
+    }
+}
+

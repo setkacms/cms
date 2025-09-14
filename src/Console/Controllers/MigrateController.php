@@ -14,3 +14,36 @@
  * https://github.com/setkacms/cms
  * See LICENSE file for details.
  */
+
+namespace Setka\Cms\Console\Controllers;
+
+use Setka\Cms\Plugins\PluginRegistry;
+use yii\console\controllers\MigrateController as BaseMigrateController;
+
+/**
+ * Обёртка над стандартной командой `yii migrate` с поддержкой миграций плагинов.
+ */
+class MigrateController extends BaseMigrateController
+{
+    /**
+     * Добавляет пути миграций плагинов к стандартным путям.
+     */
+    public function init(): void
+    {
+        parent::init();
+
+        $paths = (array) $this->migrationPath;
+        $registry = new PluginRegistry();
+        foreach ($registry->all() as $class) {
+            if (method_exists($class, 'migrationsPath')) {
+                $paths[] = $class::migrationsPath();
+            } elseif (defined("$class::MIGRATIONS_PATH")) {
+                /** @phpstan-ignore-next-line */
+                $paths[] = $class::MIGRATIONS_PATH;
+            }
+        }
+
+        $this->migrationPath = $paths;
+    }
+}
+

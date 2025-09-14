@@ -1,0 +1,13 @@
+#!/usr/bin/env php
+<?php
+
+// Setka CMS console launcher
+
+declare(strict_types=1);
+
+$projectRoot = dirname(__DIR__);
+
+require $projectRoot . '/vendor/autoload.php';
+
+$app = new \Setka\Cms\Application('console', $projectRoot);
+$app->run();

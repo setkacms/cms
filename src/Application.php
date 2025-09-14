@@ -22,10 +22,16 @@ use yii\base\InvalidConfigException;
 class Application
 {
     private string $type;
-    
-    public function __construct(string $type)
+
+    private string $projectRoot;
+
+    private array $overrides;
+
+    public function __construct(string $type, string $projectRoot, array $overrides = [])
     {
         $this->type = $type;
+        $this->projectRoot = $projectRoot;
+        $this->overrides = $overrides;
     }
     
     /**
@@ -33,8 +39,10 @@ class Application
      */
     public function run(): void
     {
+        (new Bootstrap\Kernel($this->projectRoot))->bootstrap();
+
         $config = $this->loadConfig();
-        
+
         if ($this->type === 'web') {
             (new \yii\web\Application($config))->run();
         } elseif ($this->type === 'console') {
@@ -46,16 +54,17 @@ class Application
     
     private function loadConfig(): array
     {
-        $basePath = dirname(__DIR__, 2);
-        $configDir = $basePath . '/config';
-        
-        if ($this->type === 'web') {
-            return require $configDir . '/web.php';
+        $config = require $this->configPath($this->type);
+
+        if ($this->overrides) {
+            $config = array_replace_recursive($config, $this->overrides);
         }
-        if ($this->type === 'console') {
-            return require $configDir . '/console.php';
-        }
-        
-        return [];
+
+        return $config;
+    }
+
+    private function configPath(string $type): string
+    {
+        return $this->projectRoot . '/config/' . $type . '.php';
     }
 }

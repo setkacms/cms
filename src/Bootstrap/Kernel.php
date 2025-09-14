@@ -15,25 +15,16 @@
  * See LICENSE file for details.
  */
 
-namespace Setka\Cms\Plugins;
+namespace Setka\Cms\Bootstrap;
 
-class PluginRegistry
+class Kernel
 {
-    /**
-     * @var string[]
-     */
-    private array $plugins = [];
-
-    public function register(string $class): void
+    public function __construct(private string $projectRoot)
     {
-        $this->plugins[] = $class;
     }
 
-    /**
-     * @return string[]
-     */
-    public function all(): array
+    public function bootstrap(): void
     {
-        return $this->plugins;
+        (new PluginBootstrap($this->projectRoot))->bootstrap();
     }
 }

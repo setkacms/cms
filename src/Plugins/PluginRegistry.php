@@ -17,23 +17,65 @@
 
 namespace Setka\Cms\Plugins;
 
+use Setka\Cms\Contracts\Plugins\PluginContext;
+
 class PluginRegistry
 {
     /**
      * @var string[]
      */
-    private array $plugins = [];
+    private static array $plugins = [];
 
-    public function register(string $class): void
+    private static ?PluginContext $context = null;
+
+    public static function register(string $class): void
     {
-        $this->plugins[] = $class;
+        // Avoid duplicates
+        if (!in_array($class, self::$plugins, true)) {
+            self::$plugins[] = $class;
+        }
     }
 
     /**
      * @return string[]
      */
-    public function all(): array
+    public static function all(): array
     {
-        return $this->plugins;
+        return self::$plugins;
+    }
+
+    public static function setContext(PluginContext $context): void
+    {
+        self::$context = $context;
+    }
+
+    public static function getContext(): ?PluginContext
+    {
+        return self::$context;
+    }
+
+    /**
+     * Instantiate and register all discovered plugins with provided context.
+     */
+    public static function registerPlugins(PluginContext $ctx): void
+    {
+        foreach (self::all() as $class) {
+            if (!class_exists($class)) {
+                continue;
+            }
+
+            $plugin = new $class();
+            if ($plugin instanceof \Setka\Cms\Contracts\Plugins\PluginInterface) {
+                $plugin->register($ctx);
+                continue;
+            }
+
+            // Backward compatibility
+            if (method_exists($plugin, 'bootstrap')) {
+                $plugin->bootstrap();
+            } elseif (method_exists($plugin, '__invoke')) {
+                $plugin();
+            }
+        }
     }
 }

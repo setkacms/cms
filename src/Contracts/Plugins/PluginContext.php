@@ -21,15 +21,67 @@ use Setka\Cms\Contracts\Fields\FieldTypeInterface;
 
 final class PluginContext
 {
+    /** @var FieldTypeInterface[] */
+    private array $fieldTypes = [];
+    /**
+     * @var array<int, array{method:string,path:string,handler:callable}>
+     */
+    private array $routes = [];
+    /** @var callable[] */
+    private array $graphqlSchemas = [];
+    /** @var string[] */
+    private array $migrationPaths = [];
+
     public function registerFieldType(FieldTypeInterface $type): void
-    {}
+    {
+        $this->fieldTypes[] = $type;
+    }
     
     public function addRoute(string $method, string $path, callable $handler): void
-    {}
+    {
+        $this->routes[] = [
+            'method' => strtoupper($method),
+            'path' => $path,
+            'handler' => $handler,
+        ];
+    }
     
     public function addGraphqlSchema(callable $fn): void
-    {}
+    {
+        $this->graphqlSchemas[] = $fn;
+    }
     
     public function addMigrationPath(string $path): void
-    {}
+    {
+        if ($path !== '' && !in_array($path, $this->migrationPaths, true)) {
+            $this->migrationPaths[] = $path;
+        }
+    }
+
+    /** @return FieldTypeInterface[] */
+    public function getFieldTypes(): array
+    {
+        return $this->fieldTypes;
+    }
+
+    /**
+     * @return array<int, array{method:string,path:string,handler:callable}>
+     */
+    public function getRoutes(): array
+    {
+        return $this->routes;
+    }
+
+    /** @return callable[] */
+    public function getGraphqlSchemas(): array
+    {
+        return $this->graphqlSchemas;
+    }
+
+    /** @return string[] */
+    public function getMigrationPaths(): array
+    {
+        return $this->migrationPaths;
+    }
 }
+

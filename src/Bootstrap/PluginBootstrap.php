@@ -17,6 +17,8 @@
 
 namespace Setka\Cms\Bootstrap;
 
+use Setka\Cms\Contracts\Plugins\PluginContext;
+use Setka\Cms\Contracts\Plugins\PluginInterface;
 use Setka\Cms\Plugins\ComposerPluginReader;
 use Setka\Cms\Plugins\PluginRegistry;
 
@@ -31,22 +33,13 @@ class PluginBootstrap
         $reader = new ComposerPluginReader($this->projectRoot);
         $classes = $reader->read();
 
-        $registry = new PluginRegistry();
         foreach ($classes as $class) {
-            $registry->register($class);
+            PluginRegistry::register($class);
         }
 
-        foreach ($registry->all() as $class) {
-            if (!class_exists($class)) {
-                continue;
-            }
-
-            $plugin = new $class();
-            if (method_exists($plugin, 'bootstrap')) {
-                $plugin->bootstrap();
-            } elseif (method_exists($plugin, '__invoke')) {
-                $plugin();
-            }
-        }
+        // Shared context collected from all plugins
+        $ctx = new PluginContext();
+        PluginRegistry::registerPlugins($ctx);
+        PluginRegistry::setContext($ctx);
     }
 }

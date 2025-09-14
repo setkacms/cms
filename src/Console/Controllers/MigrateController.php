@@ -33,8 +33,16 @@ class MigrateController extends BaseMigrateController
         parent::init();
 
         $paths = (array) $this->migrationPath;
-        $registry = new PluginRegistry();
-        foreach ($registry->all() as $class) {
+
+        // Prefer paths registered via PluginContext
+        $ctx = PluginRegistry::getContext();
+        if ($ctx) {
+            foreach ($ctx->getMigrationPaths() as $p) {
+                $paths[] = $p;
+            }
+        }
+
+        foreach (PluginRegistry::all() as $class) {
             if (method_exists($class, 'migrationsPath')) {
                 $paths[] = $class::migrationsPath();
             } elseif (defined("$class::MIGRATIONS_PATH")) {

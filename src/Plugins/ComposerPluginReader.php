@@ -33,7 +33,6 @@ class ComposerPluginReader
         }
 
         $pluginType = $extra['plugin-type'] ?? 'setka-plugin';
-        $pluginMetaKey = $extra['plugin-meta-key'] ?? 'setka.plugin.class';
 
         $installedPath = $this->projectRoot . '/vendor/composer/installed.json';
         if (!is_file($installedPath)) {
@@ -48,9 +47,23 @@ class ComposerPluginReader
             if (($package['type'] ?? '') !== $pluginType) {
                 continue;
             }
-            $extra = $package['extra'][$pluginMetaKey] ?? null;
-            if ($extra) {
-                $plugins[] = $extra;
+
+            // Prefer nested composer extra: extra.setka.plugin-class
+            $class = $package['extra']['setka']['plugin-class'] ?? null;
+            // Fallback to flat meta key when provided in root composer.json config
+            if ($class === null) {
+                $pluginMetaKey = $extra['plugin-meta-key'] ?? 'setka.plugin.class';
+                $class = $package['extra'][$pluginMetaKey] ?? null;
+            }
+
+            if (is_string($class) && $class !== '') {
+                $plugins[] = $class;
+            } elseif (is_array($class)) {
+                foreach ($class as $c) {
+                    if (is_string($c) && $c !== '') {
+                        $plugins[] = $c;
+                    }
+                }
             }
         }
 

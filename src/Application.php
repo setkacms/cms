@@ -44,6 +44,23 @@ class Application
 
         $config = $this->loadConfig();
 
+        // Wire Twig renderer into Yii view component
+        $config['components']['view'] = $config['components']['view'] ?? [];
+        $config['components']['view'] = array_replace_recursive(
+            [
+                'class' => \yii\web\View::class,
+                'renderers' => [],
+            ],
+            $config['components']['view']
+        );
+
+        $config['components']['view']['renderers']['twig'] = [
+            'class' => \Setka\Cms\Infrastructure\Yii\TwigViewRenderer::class,
+            // Inject already built instances from the container
+            'twig' => $container->get(\Twig\Environment::class),
+            'loader' => $container->get(\Twig\Loader\FilesystemLoader::class),
+        ];
+
         if ($this->type === 'web') {
             (new \yii\web\Application($config))->run();
         } elseif ($this->type === 'console') {

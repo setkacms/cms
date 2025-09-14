@@ -20,6 +20,7 @@ namespace Setka\Cms\Bootstrap;
 use Setka\Cms\Bootstrap\Providers\CacheProvider;
 use Setka\Cms\Bootstrap\Providers\DatabaseProvider;
 use Setka\Cms\Bootstrap\Providers\EventProvider;
+use Setka\Cms\Bootstrap\Providers\GraphQLProvider;
 use Setka\Cms\Bootstrap\Providers\StorageProvider;
 use Setka\Cms\Bootstrap\Providers\HttpClientProvider;
 use Setka\Cms\Bootstrap\Providers\LogProvider;
@@ -37,6 +38,7 @@ final class Kernel implements BootstrapInterface
         CacheProvider::class,
         DatabaseProvider::class,
         EventProvider::class,
+        GraphQLProvider::class,
         HttpClientProvider::class,
         LogProvider::class,
         StorageProvider::class,

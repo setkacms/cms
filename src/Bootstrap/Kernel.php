@@ -23,6 +23,7 @@ use Setka\Cms\Bootstrap\Providers\EventProvider;
 use Setka\Cms\Bootstrap\Providers\StorageProvider;
 use Setka\Cms\Bootstrap\Providers\HttpClientProvider;
 use Setka\Cms\Bootstrap\Providers\LogProvider;
+use Setka\Cms\Bootstrap\Providers\QueueProvider;
 use Setka\Cms\Bootstrap\Providers\ProviderInterface;
 use yii\base\Application as YiiApplication;
 use yii\base\BootstrapInterface;
@@ -39,6 +40,7 @@ final class Kernel implements BootstrapInterface
         EventProvider::class,
         HttpClientProvider::class,
         LogProvider::class,
+        QueueProvider::class,
         StorageProvider::class,
     ];
 

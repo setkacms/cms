@@ -39,6 +39,7 @@
         "codeception/codeception": "^5.3",
         "codeception/module-yii2": "^1.1",
         "creocoder/yii2-flysystem": "^1.2",
+        "dmstr/yii2-adminlte-asset": "2.1",
         "guzzlehttp/guzzle": "^7.9",
         "league/flysystem-aws-s3-v3": "^1.0",
         "monolog/monolog": "^3.7",

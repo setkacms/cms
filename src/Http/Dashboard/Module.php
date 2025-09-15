@@ -7,6 +7,7 @@
 
 namespace Setka\Cms\Http\Dashboard;
 
+use RuntimeException;
 use yii\base\Module as BaseModule;
 
 class Module extends BaseModule
@@ -17,10 +18,15 @@ class Module extends BaseModule
     {
         parent::init();
 
-        $this->setViewPath(__DIR__ . DIRECTORY_SEPARATOR . 'Views');
-        $this->setLayoutPath($this->getViewPath() . DIRECTORY_SEPARATOR . 'layouts');
+        $moduleRoot = realpath(__DIR__);
+        if ($moduleRoot === false) {
+            throw new RuntimeException('Unable to resolve dashboard module base path.');
+        }
+
+        $this->setBasePath($moduleRoot);
+        $viewPath = $moduleRoot . DIRECTORY_SEPARATOR . 'Views';
+        $this->setViewPath($viewPath);
+        $this->setLayoutPath($viewPath . DIRECTORY_SEPARATOR . 'layouts');
         $this->layout = 'main';
     }
 }
-
-

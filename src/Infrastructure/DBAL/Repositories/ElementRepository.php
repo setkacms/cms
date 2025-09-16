@@ -22,6 +22,7 @@ namespace Setka\Cms\Infrastructure\DBAL\Repositories;
 use InvalidArgumentException;
 use Setka\Cms\Contracts\Elements\ElementRepositoryInterface;
 use Setka\Cms\Domain\Elements\Collection;
+use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Elements\Element;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use yii\db\Connection;
@@ -90,7 +91,12 @@ final class ElementRepository implements ElementRepositoryInterface
 
         $collection = new Collection(
             workspace: $workspace,
+            handle: (string) ($row['collection_handle'] ?? 'collection'),
             name: (string) ($row['collection_name'] ?? 'collection'),
+            structure: $this->mapCollectionStructure($row['collection_structure'] ?? null),
+            defaultSchemaId: isset($row['collection_default_schema_id']) ? (int) $row['collection_default_schema_id'] : null,
+            urlRules: $this->decodeJsonArray($row['collection_url_rules'] ?? null),
+            publicationRules: $this->decodeJsonArray($row['collection_publication_rules'] ?? null),
             id: isset($row['collection_id']) ? (int) $row['collection_id'] : null,
             uid: isset($row['collection_uid']) ? (string) $row['collection_uid'] : null,
         );
@@ -114,7 +120,12 @@ final class ElementRepository implements ElementRepositoryInterface
                 'element_locale' => 'e.locale',
                 'collection_id' => 'c.id',
                 'collection_uid' => 'c.uid',
+                'collection_handle' => 'c.handle',
                 'collection_name' => 'c.name',
+                'collection_structure' => 'c.structure',
+                'collection_default_schema_id' => 'c.default_schema_id',
+                'collection_url_rules' => 'c.url_rules',
+                'collection_publication_rules' => 'c.publication_rules',
                 'workspace_id' => 'w.id',
                 'workspace_uid' => 'w.uid',
                 'workspace_handle' => 'w.handle',
@@ -179,5 +190,30 @@ final class ElementRepository implements ElementRepositoryInterface
 
         $decoded = json_decode((string) $json, true);
         return is_array($decoded) ? $decoded : [];
+    }
+
+    /**
+     * @return array<int|string, mixed>
+     */
+    private function decodeJsonArray(null|string $json): array
+    {
+        if ($json === null || $json === '') {
+            return [];
+        }
+
+        $decoded = json_decode((string) $json, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function mapCollectionStructure(mixed $value): CollectionStructure
+    {
+        if (is_string($value)) {
+            $structure = CollectionStructure::tryFrom(strtolower($value));
+            if ($structure !== null) {
+                return $structure;
+            }
+        }
+
+        return CollectionStructure::FLAT;
     }
 }

@@ -4,14 +4,17 @@ declare(strict_types=1);
 namespace Setka\Cms\Tests\Integration\Infrastructure\DBAL\Repositories;
 
 use PHPUnit\Framework\TestCase;
+use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Fields\FieldType;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use Setka\Cms\Infrastructure\DBAL\Repositories\ElementRepository;
 use Setka\Cms\Infrastructure\DBAL\Repositories\FieldRepository;
 use yii\db\Connection;
-use yii\db\Query;
 use function class_exists;
+use function json_encode;
+use function preg_replace;
+use function strtolower;
 
 if (!class_exists('Yii', false)) {
     require dirname(__DIR__, 5) . '/vendor/yiisoft/yii2/Yii.php';
@@ -79,7 +82,7 @@ final class WorkspaceMultisiteTest extends TestCase
     public function testElementRepositoryScopesByWorkspaceAndLocale(): void
     {
         $defaultCollectionId = $this->createCollection($this->defaultWorkspace, 'Articles');
-        $secondCollectionId = $this->createCollection($this->secondWorkspace, 'Articles');
+        $secondCollectionId = $this->createCollection($this->secondWorkspace, 'Articles', structure: CollectionStructure::TREE);
 
         $defaultEn = $this->createElement($defaultCollectionId, $this->defaultWorkspace, 'en-US');
         $defaultDe = $this->createElement($defaultCollectionId, $this->defaultWorkspace, 'de-DE');
@@ -90,6 +93,8 @@ final class WorkspaceMultisiteTest extends TestCase
 
         $this->assertNotNull($elementEn);
         $this->assertSame('en-US', $elementEn->getLocale());
+        $this->assertSame('articles', $elementEn->getCollection()->getHandle());
+        $this->assertTrue($elementEn->getCollection()->isFlat());
 
         $this->assertNotNull($elementDe);
         $this->assertSame('de-DE', $elementDe->getLocale());
@@ -101,6 +106,7 @@ final class WorkspaceMultisiteTest extends TestCase
         $elementById = $this->elementRepository->findById($this->defaultWorkspace, $defaultEn['id'], 'en-US');
         $this->assertNotNull($elementById);
         $this->assertSame($defaultEn['uid'], $elementById->getUid());
+        $this->assertTrue($elementById->getCollection()->isFlat());
     }
 
     /**
@@ -129,44 +135,34 @@ final class WorkspaceMultisiteTest extends TestCase
         ];
     }
 
-    private function createCollection(Workspace $workspace, string $name): int
-    {
+    private function createCollection(
+        Workspace $workspace,
+        string $name,
+        ?string $handle = null,
+        CollectionStructure $structure = CollectionStructure::FLAT,
+        ?int $defaultSchemaId = null,
+        array $urlRules = [],
+        array $publicationRules = []
+    ): int {
         $now = time();
         $uid = bin2hex(random_bytes(16));
+        $workspaceId = $this->requireWorkspaceId($workspace);
+        $handle = $handle ?? $this->makeHandle($name);
 
         $this->db->createCommand()->insert('collection', [
             'uid' => $uid,
+            'handle' => $handle,
             'name' => $name,
-            'workspace_id' => $this->requireWorkspaceId($workspace),
+            'structure' => $structure->value,
+            'default_schema_id' => $defaultSchemaId,
+            'url_rules' => json_encode($urlRules, JSON_THROW_ON_ERROR),
+            'publication_rules' => json_encode($publicationRules, JSON_THROW_ON_ERROR),
+            'workspace_id' => $workspaceId,
             'created_at' => $now,
             'updated_at' => $now,
         ])->execute();
 
         return (int) $this->db->getLastInsertID();
-    }
-
-    private function loadWorkspaceByHandle(string $handle): Workspace
-    {
-        $row = (new Query())
-            ->from('workspace')
-            ->where(['handle' => $handle])
-            ->one($this->db);
-
-        if (!$row) {
-            throw new \RuntimeException("Workspace {$handle} not found");
-        }
-
-        $locales = $this->decodeJsonList($row['locales'] ?? '[]');
-        $settings = $this->decodeJsonMap($row['global_settings'] ?? '{}');
-
-        return new Workspace(
-            handle: (string) $row['handle'],
-            name: (string) $row['name'],
-            locales: $locales,
-            globalSettings: $settings,
-            id: isset($row['id']) ? (int) $row['id'] : null,
-            uid: isset($row['uid']) ? (string) $row['uid'] : null,
-        );
     }
 
     /**
@@ -215,13 +211,33 @@ final class WorkspaceMultisiteTest extends TestCase
             updated_at INTEGER NOT NULL
         )')->execute();
 
+        $this->db->createCommand('CREATE TABLE schema (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uid CHAR(32) NOT NULL UNIQUE,
+            workspace_id INTEGER NOT NULL,
+            handle VARCHAR(190) NOT NULL,
+            name VARCHAR(190) NOT NULL,
+            config TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(handle, workspace_id),
+            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )')->execute();
+
         $this->db->createCommand('CREATE TABLE collection (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uid CHAR(32) NOT NULL UNIQUE,
+            handle VARCHAR(190) NOT NULL,
             name VARCHAR(190) NOT NULL,
+            structure VARCHAR(16) NOT NULL,
+            default_schema_id INTEGER NULL,
+            url_rules TEXT NULL,
+            publication_rules TEXT NULL,
             workspace_id INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
+            UNIQUE(handle, workspace_id),
+            FOREIGN KEY(default_schema_id) REFERENCES schema(id) ON DELETE SET NULL ON UPDATE CASCADE,
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
 
@@ -257,41 +273,12 @@ final class WorkspaceMultisiteTest extends TestCase
         $this->db->createCommand('CREATE INDEX idx_element_locale ON element(locale)')->execute();
     }
 
-    /**
-     * @return string[]
-     */
-    private function decodeJsonList(null|string $json): array
+    private function makeHandle(string $name): string
     {
-        if ($json === null || $json === '') {
-            return [];
-        }
+        $lower = strtolower($name);
+        $sanitised = preg_replace('/[^a-z0-9]+/', '-', $lower) ?? $lower;
+        $sanitised = trim($sanitised, '-');
 
-        $decoded = json_decode((string) $json, true);
-        if (!is_array($decoded)) {
-            return [];
-        }
-
-        $filtered = array_filter(
-            $decoded,
-            static fn(mixed $value): bool => is_string($value) && $value !== ''
-        );
-
-        return array_values(array_map(
-            static fn(string $value): string => $value,
-            $filtered
-        ));
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    private function decodeJsonMap(null|string $json): array
-    {
-        if ($json === null || $json === '') {
-            return [];
-        }
-
-        $decoded = json_decode((string) $json, true);
-        return is_array($decoded) ? $decoded : [];
+        return $sanitised !== '' ? $sanitised : 'collection';
     }
 }

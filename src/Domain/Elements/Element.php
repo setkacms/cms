@@ -71,6 +71,11 @@ class Element
         return $this->uid;
     }
 
+    public function getCollection(): Collection
+    {
+        return $this->collection;
+    }
+
     public function getLocale(): string
     {
         return $this->locale;
@@ -84,20 +89,20 @@ class Element
     public function publish(): void
     {
         $this->status = 'published';
-        $this->updatedAt = new DateTimeImmutable();
+        $this->touch();
     }
 
     public function archive(): void
     {
         $this->status = 'archived';
-        $this->updatedAt = new DateTimeImmutable();
+        $this->touch();
     }
 
     public function setValue(Field $field, mixed $value): void
     {
         $field->validate($value);
         $this->values[$field->getHandle()] = $value;
-        $this->updatedAt = new DateTimeImmutable();
+        $this->touch();
     }
 
     public function getValue(Field $field): mixed
@@ -134,5 +139,10 @@ class Element
     public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
+    }
+
+    private function touch(): void
+    {
+        $this->updatedAt = new DateTimeImmutable();
     }
 }

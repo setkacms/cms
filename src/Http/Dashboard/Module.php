@@ -7,6 +7,7 @@
 
 namespace Setka\Cms\Http\Dashboard;
 
+use dmstr\web\AdminLteAsset;
 use RuntimeException;
 use yii\base\Module as BaseModule;
 
@@ -17,6 +18,10 @@ class Module extends BaseModule
     public function init(): void
     {
         parent::init();
+
+        if (!class_exists('app\\assets\\AppAsset', false)) {
+            class_alias(AdminLteAsset::class, 'app\\assets\\AppAsset');
+        }
 
         $moduleRoot = realpath(__DIR__);
         if ($moduleRoot === false) {

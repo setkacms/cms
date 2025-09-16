@@ -20,12 +20,16 @@ declare(strict_types=1);
 namespace Setka\Cms\Infrastructure\DBAL\Repositories;
 
 use InvalidArgumentException;
+use JsonException;
 use Setka\Cms\Contracts\Fields\FieldRepositoryInterface;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Fields\FieldType;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use yii\db\Connection;
 use yii\db\Query;
+use function is_array;
+use function json_decode;
+use function json_encode;
 
 final class FieldRepository implements FieldRepositoryInterface
 {
@@ -65,28 +69,38 @@ final class FieldRepository implements FieldRepositoryInterface
         $existing = $this->findByHandle($workspace, $field->getHandle(), $locale);
 
         $data = [
+            'uid' => $existing?->getUid() ?? $field->getUid(),
             'handle' => $field->getHandle(),
-            'name' => $field->getHandle(),
+            'name' => $field->getName(),
             'type' => $field->getType()->value,
             'required' => $field->isRequired() ? 1 : 0,
+            'settings' => $this->encodeSettings($field->getSettings()),
+            'localized' => $field->isLocalized() ? 1 : 0,
+            'is_unique' => $field->isUnique() ? 1 : 0,
+            'searchable' => $field->isSearchable() ? 1 : 0,
+            'multi_valued' => $field->isMultiValued() ? 1 : 0,
             'workspace_id' => $workspaceId,
             'updated_at' => time(),
         ];
 
         if ($existing) {
-            $uid = $this->getRowUidByHandle($workspaceId, $field->getHandle());
-            $data['uid'] = $uid ?? $this->generateUid();
+            $id = $existing->getId();
+            $condition = [
+                'handle' => $field->getHandle(),
+                'workspace_id' => $workspaceId,
+            ];
+
+            if ($id !== null) {
+                $condition = ['id' => $id, 'workspace_id' => $workspaceId];
+            }
+
             $this->db->createCommand()
-                ->update('{{%field}}', $data, [
-                    'handle' => $field->getHandle(),
-                    'workspace_id' => $workspaceId,
-                ])
+                ->update('{{%field}}', $data, $condition)
                 ->execute();
 
             return;
         }
 
-        $data['uid'] = $this->generateUid();
         $data['created_at'] = time();
         $this->db->createCommand()
             ->insert('{{%field}}', $data)
@@ -115,28 +129,42 @@ final class FieldRepository implements FieldRepositoryInterface
             name: (string) ($row['name'] ?? $row['handle']),
             type: $type,
             required: (bool) $row['required'],
+            settings: $this->decodeSettings($row['settings'] ?? null),
+            localized: (bool) ($row['localized'] ?? false),
+            unique: (bool) ($row['is_unique'] ?? false),
+            searchable: (bool) ($row['searchable'] ?? false),
+            multiValued: (bool) ($row['multi_valued'] ?? false),
             id: isset($row['id']) ? (int) $row['id'] : null,
             uid: isset($row['uid']) ? (string) $row['uid'] : null,
         );
     }
 
-    private function getRowUidByHandle(int $workspaceId, string $handle): ?string
+    private function encodeSettings(array $settings): string
     {
-        $uid = (new Query())
-            ->select('uid')
-            ->from('{{%field}}')
-            ->where([
-                'handle' => $handle,
-                'workspace_id' => $workspaceId,
-            ])
-            ->scalar($this->db);
-
-        return $uid ? (string) $uid : null;
+        try {
+            return json_encode($settings, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return '{}';
+        }
     }
 
-    private function generateUid(): string
+    private function decodeSettings(mixed $settings): array
     {
-        return bin2hex(random_bytes(16));
+        if (is_array($settings)) {
+            return $settings;
+        }
+
+        if ($settings === null || $settings === '') {
+            return [];
+        }
+
+        try {
+            $decoded = json_decode((string) $settings, true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return [];
+        }
+
+        return is_array($decoded) ? $decoded : [];
     }
 
     private function requireWorkspaceId(Workspace $workspace): int
@@ -149,3 +177,4 @@ final class FieldRepository implements FieldRepositoryInterface
         return $workspaceId;
     }
 }
+

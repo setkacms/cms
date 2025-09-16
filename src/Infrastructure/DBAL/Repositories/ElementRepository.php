@@ -106,6 +106,7 @@ final class ElementRepository implements ElementRepositoryInterface
             locale: (string) $row['element_locale'],
             id: isset($row['element_id']) ? (int) $row['element_id'] : null,
             uid: isset($row['element_uid']) ? (string) $row['element_uid'] : null,
+            schemaId: isset($row['element_schema_id']) ? (int) $row['element_schema_id'] : null,
         );
     }
 
@@ -118,6 +119,7 @@ final class ElementRepository implements ElementRepositoryInterface
                 'element_id' => 'e.id',
                 'element_uid' => 'e.uid',
                 'element_locale' => 'e.locale',
+                'element_schema_id' => 'e.schema_id',
                 'collection_id' => 'c.id',
                 'collection_uid' => 'c.uid',
                 'collection_handle' => 'c.handle',

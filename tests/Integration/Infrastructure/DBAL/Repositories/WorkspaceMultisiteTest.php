@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Setka\Cms\Tests\Integration\Infrastructure\DBAL\Repositories;
 
-use DateTimeImmutable;
 use PHPUnit\Framework\TestCase;
 use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Fields\Field;
@@ -11,9 +10,7 @@ use Setka\Cms\Domain\Fields\FieldType;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use Setka\Cms\Infrastructure\DBAL\Repositories\ElementRepository;
 use Setka\Cms\Infrastructure\DBAL\Repositories\FieldRepository;
-use Setka\Cms\Infrastructure\DBAL\Repositories\FieldValueRepository;
 use yii\db\Connection;
-use yii\db\Query;
 use function class_exists;
 use function json_encode;
 use function preg_replace;
@@ -28,8 +25,6 @@ final class WorkspaceMultisiteTest extends TestCase
     private Connection $db;
 
     private FieldRepository $fieldRepository;
-
-    private FieldValueRepository $fieldValueRepository;
 
     private ElementRepository $elementRepository;
 
@@ -49,7 +44,6 @@ final class WorkspaceMultisiteTest extends TestCase
         $this->createSchema();
 
         $this->fieldRepository = new FieldRepository($this->db);
-        $this->fieldValueRepository = new FieldValueRepository($this->db);
         $this->elementRepository = new ElementRepository($this->db);
 
         $this->defaultWorkspace = $this->createWorkspace('default', 'Default', ['en-US']);
@@ -67,23 +61,8 @@ final class WorkspaceMultisiteTest extends TestCase
 
     public function testFieldRepositoryScopesByWorkspace(): void
     {
-        $defaultField = new Field(
-            handle: 'heroTitle',
-            name: 'Hero Title',
-            type: FieldType::TEXT,
-            required: true,
-            settings: ['maxLength' => 120],
-            localized: true,
-            searchable: true,
-        );
-        $otherField = new Field(
-            handle: 'heroTitle',
-            name: 'Hero Title',
-            type: FieldType::TEXT,
-            required: false,
-            settings: ['maxLength' => 80],
-            searchable: false,
-        );
+        $defaultField = new Field('heroTitle', 'Hero Title', FieldType::TEXT, true);
+        $otherField = new Field('heroTitle', 'Hero Title', FieldType::TEXT, false);
 
         $this->fieldRepository->save($this->defaultWorkspace, $defaultField);
         $this->fieldRepository->save($this->secondWorkspace, $otherField);
@@ -93,75 +72,11 @@ final class WorkspaceMultisiteTest extends TestCase
 
         $this->assertNotNull($fromDefault);
         $this->assertTrue($fromDefault->isRequired());
-        $this->assertTrue($fromDefault->isLocalized());
-        $this->assertTrue($fromDefault->isSearchable());
-        $this->assertSame(['maxLength' => 120], $fromDefault->getSettings());
 
         $this->assertNotNull($fromOther);
         $this->assertFalse($fromOther->isRequired());
-        $this->assertFalse($fromOther->isLocalized());
-        $this->assertFalse($fromOther->isSearchable());
-        $this->assertSame(['maxLength' => 80], $fromOther->getSettings());
 
         $this->assertNull($this->fieldRepository->findByHandle($this->defaultWorkspace, 'missing'));
-    }
-
-    public function testFieldValueRepositoryPersistsValues(): void
-    {
-        $collectionId = $this->createCollection($this->defaultWorkspace, 'Articles');
-        $elementEn = $this->createElement($collectionId, $this->defaultWorkspace, 'en-US');
-        $elementDe = $this->createElement($collectionId, $this->defaultWorkspace, 'de-DE');
-
-        $selectField = new Field(
-            handle: 'categories',
-            name: 'Categories',
-            type: FieldType::SELECT,
-            settings: ['options' => ['hero', 'banner']],
-            localized: true,
-            searchable: true,
-            multiValued: true,
-        );
-        $this->fieldRepository->save($this->defaultWorkspace, $selectField);
-        $selectField = $this->fieldRepository->findByHandle($this->defaultWorkspace, 'categories');
-        $this->assertNotNull($selectField);
-        $this->assertNotNull($selectField->getId());
-
-        $this->fieldValueRepository->save($this->defaultWorkspace, $elementEn['id'], $selectField, ['hero', 'banner'], 'en-US');
-        $this->fieldValueRepository->save($this->defaultWorkspace, $elementDe['id'], $selectField, ['banner'], 'de-DE');
-
-        $storedEn = $this->fieldValueRepository->find($this->defaultWorkspace, $elementEn['id'], $selectField, 'en-US');
-        $storedDe = $this->fieldValueRepository->find($this->defaultWorkspace, $elementDe['id'], $selectField, 'de-DE');
-
-        $this->assertSame(['hero', 'banner'], $storedEn);
-        $this->assertSame(['banner'], $storedDe);
-
-        $searchRow = (new Query())
-            ->from('field_value')
-            ->where([
-                'element_id' => $elementEn['id'],
-                'field_id' => $selectField->getId(),
-            ])
-            ->one($this->db);
-        $this->assertIsArray($searchRow);
-        $this->assertSame('hero banner', $searchRow['search_value']);
-
-        $dateField = new Field(
-            handle: 'publishDate',
-            name: 'Publish Date',
-            type: FieldType::DATE,
-            searchable: false,
-        );
-        $this->fieldRepository->save($this->defaultWorkspace, $dateField);
-        $dateField = $this->fieldRepository->findByHandle($this->defaultWorkspace, 'publishDate');
-        $this->assertNotNull($dateField);
-        $this->assertNotNull($dateField->getId());
-
-        $publishDate = new DateTimeImmutable('2025-09-17T10:00:00+00:00');
-        $this->fieldValueRepository->save($this->defaultWorkspace, $elementEn['id'], $dateField, $publishDate, null);
-
-        $storedDate = $this->fieldValueRepository->find($this->defaultWorkspace, $elementEn['id'], $dateField, null);
-        $this->assertInstanceOf(DateTimeImmutable::class, $storedDate);
-        $this->assertSame($publishDate->format(DATE_ATOM), $storedDate->format(DATE_ATOM));
     }
 
     public function testElementRepositoryScopesByWorkspaceAndLocale(): void
@@ -333,38 +248,12 @@ final class WorkspaceMultisiteTest extends TestCase
             name VARCHAR(190) NOT NULL,
             type VARCHAR(32) NOT NULL,
             required INTEGER NOT NULL DEFAULT 0,
-            settings TEXT NOT NULL DEFAULT "{}",
-            localized INTEGER NOT NULL DEFAULT 0,
-            is_unique INTEGER NOT NULL DEFAULT 0,
-            searchable INTEGER NOT NULL DEFAULT 0,
-            multi_valued INTEGER NOT NULL DEFAULT 0,
             workspace_id INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             UNIQUE(handle, workspace_id),
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
-
-        $this->db->createCommand('CREATE TABLE field_value (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            element_id INTEGER NOT NULL,
-            field_id INTEGER NOT NULL,
-            field_handle VARCHAR(190) NOT NULL,
-            workspace_id INTEGER NOT NULL,
-            locale VARCHAR(12) NULL,
-            value_json TEXT NOT NULL,
-            search_value VARCHAR(512) NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            UNIQUE(element_id, field_id, locale),
-            FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY(field_id) REFERENCES field(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
-        )')->execute();
-
-        $this->db->createCommand('CREATE INDEX idx_field_value_element ON field_value(element_id)')->execute();
-        $this->db->createCommand('CREATE INDEX idx_field_value_workspace ON field_value(workspace_id)')->execute();
-        $this->db->createCommand('CREATE INDEX idx_field_value_field ON field_value(field_id)')->execute();
 
         $this->db->createCommand('CREATE TABLE element (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

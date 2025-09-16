@@ -8,7 +8,7 @@
  *
  * @package   Setka CMS
  * @version   1.0.0
- * @author    Vitaliy Kamelин <v.kamelин@gmail.com>
+ * @author    Vitaliy Kamelin <v.kamelin@gmail.com>
  * @license   Proprietary
  *
  * https://github.com/setkacms/cms
@@ -23,7 +23,7 @@ use DateTimeImmutable;
 use Setka\Cms\Domain\Fields\Field;
 
 /**
- * Базовый объект контента.
+ * Domain element representation with locale awareness.
  */
 class Element
 {
@@ -32,6 +32,8 @@ class Element
     private string $uid;
 
     private Collection $collection;
+
+    private string $locale;
 
     /** @var array<string, mixed> */
     private array $values = [];
@@ -44,9 +46,10 @@ class Element
 
     private DateTimeImmutable $updatedAt;
 
-    public function __construct(Collection $collection, ?int $id = null, ?string $uid = null)
+    public function __construct(Collection $collection, string $locale, ?int $id = null, ?string $uid = null)
     {
         $this->collection = $collection;
+        $this->locale = $locale;
         $this->id = $id;
         $this->uid = $uid ?? self::generateUid();
         $this->createdAt = new DateTimeImmutable();
@@ -66,6 +69,11 @@ class Element
     public function getUid(): string
     {
         return $this->uid;
+    }
+
+    public function getLocale(): string
+    {
+        return $this->locale;
     }
 
     public function getStatus(): string

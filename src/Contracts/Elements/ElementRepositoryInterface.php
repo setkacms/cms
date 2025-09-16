@@ -20,17 +20,18 @@ declare(strict_types=1);
 namespace Setka\Cms\Contracts\Elements;
 
 use Setka\Cms\Domain\Elements\Element;
+use Setka\Cms\Domain\Workspaces\Workspace;
 
 interface ElementRepositoryInterface
 {
-    public function findById(int $id): ?Element;
+    public function findById(Workspace $workspace, int $id, string $locale): ?Element;
 
-    public function findByUid(string $uid): ?Element;
+    public function findByUid(Workspace $workspace, string $uid, string $locale): ?Element;
 
     /**
      * Persist element. Inserts when id is null, otherwise updates.
      */
-    public function save(Element $element): void;
+    public function save(Workspace $workspace, Element $element, string $locale): void;
 
-    public function delete(int $id): void;
+    public function delete(Workspace $workspace, int $id, string $locale): void;
 }

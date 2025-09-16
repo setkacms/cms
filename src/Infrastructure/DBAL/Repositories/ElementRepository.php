@@ -19,9 +19,11 @@ declare(strict_types=1);
 
 namespace Setka\Cms\Infrastructure\DBAL\Repositories;
 
+use InvalidArgumentException;
 use Setka\Cms\Contracts\Elements\ElementRepositoryInterface;
 use Setka\Cms\Domain\Elements\Collection;
 use Setka\Cms\Domain\Elements\Element;
+use Setka\Cms\Domain\Workspaces\Workspace;
 use yii\db\Connection;
 use yii\db\Query;
 
@@ -31,29 +33,25 @@ final class ElementRepository implements ElementRepositoryInterface
     {
     }
 
-    public function findById(int $id): ?Element
+    public function findById(Workspace $workspace, int $id, string $locale): ?Element
     {
-        $row = (new Query())
-            ->from(['e' => '{{%element}}'])
-            ->innerJoin(['c' => '{{%collection}}'], 'c.id = e.collection_id')
-            ->where(['e.id' => $id])
+        $row = $this->createBaseQuery($workspace, $locale)
+            ->andWhere(['e.id' => $id])
             ->one($this->db);
 
         return $row ? $this->hydrate($row) : null;
     }
 
-    public function findByUid(string $uid): ?Element
+    public function findByUid(Workspace $workspace, string $uid, string $locale): ?Element
     {
-        $row = (new Query())
-            ->from(['e' => '{{%element}}'])
-            ->innerJoin(['c' => '{{%collection}}'], 'c.id = e.collection_id')
-            ->where(['e.uid' => $uid])
+        $row = $this->createBaseQuery($workspace, $locale)
+            ->andWhere(['e.uid' => $uid])
             ->one($this->db);
 
         return $row ? $this->hydrate($row) : null;
     }
 
-    public function save(Element $element): void
+    public function save(Workspace $workspace, Element $element, string $locale): void
     {
         // The current domain model does not expose collection accessor or mutators
         // for status/timestamps, so a robust save() cannot be implemented yet.
@@ -61,9 +59,19 @@ final class ElementRepository implements ElementRepositoryInterface
         // @see Setka\\Cms\\Domain\\Elements\\Element
     }
 
-    public function delete(int $id): void
+    public function delete(Workspace $workspace, int $id, string $locale): void
     {
-        $this->db->createCommand()->delete('{{%element}}', ['id' => $id])->execute();
+        $workspaceId = $this->requireWorkspaceId($workspace);
+        $this->db->createCommand()
+            ->delete(
+                '{{%element}}',
+                [
+                    'id' => $id,
+                    'workspace_id' => $workspaceId,
+                    'locale' => $locale,
+                ]
+            )
+            ->execute();
     }
 
     /**
@@ -71,18 +79,105 @@ final class ElementRepository implements ElementRepositoryInterface
      */
     private function hydrate(array $row): Element
     {
-        // Build collection minimal instance
-        $collection = new Collection(
-            name: (string) ($row['name'] ?? 'collection'),
-            id: isset($row['collection_id']) ? (int) $row['collection_id'] : null,
-            uid: isset($row['uid']) ? (string) $row['uid'] : null,
+        $workspace = new Workspace(
+            handle: (string) $row['workspace_handle'],
+            name: (string) $row['workspace_name'],
+            locales: $this->decodeJsonList($row['workspace_locales'] ?? null),
+            globalSettings: $this->decodeJsonMap($row['workspace_global_settings'] ?? null),
+            id: isset($row['workspace_id']) ? (int) $row['workspace_id'] : null,
+            uid: isset($row['workspace_uid']) ? (string) $row['workspace_uid'] : null,
         );
 
-        // Build element with id and uid
+        $collection = new Collection(
+            workspace: $workspace,
+            name: (string) ($row['collection_name'] ?? 'collection'),
+            id: isset($row['collection_id']) ? (int) $row['collection_id'] : null,
+            uid: isset($row['collection_uid']) ? (string) $row['collection_uid'] : null,
+        );
+
         return new Element(
             collection: $collection,
-            id: isset($row['id']) ? (int) $row['id'] : null,
-            uid: isset($row['uid']) ? (string) $row['uid'] : null,
+            locale: (string) $row['element_locale'],
+            id: isset($row['element_id']) ? (int) $row['element_id'] : null,
+            uid: isset($row['element_uid']) ? (string) $row['element_uid'] : null,
         );
+    }
+
+    private function createBaseQuery(Workspace $workspace, string $locale): Query
+    {
+        $workspaceId = $this->requireWorkspaceId($workspace);
+
+        return (new Query())
+            ->select([
+                'element_id' => 'e.id',
+                'element_uid' => 'e.uid',
+                'element_locale' => 'e.locale',
+                'collection_id' => 'c.id',
+                'collection_uid' => 'c.uid',
+                'collection_name' => 'c.name',
+                'workspace_id' => 'w.id',
+                'workspace_uid' => 'w.uid',
+                'workspace_handle' => 'w.handle',
+                'workspace_name' => 'w.name',
+                'workspace_locales' => 'w.locales',
+                'workspace_global_settings' => 'w.global_settings',
+            ])
+            ->from(['e' => '{{%element}}'])
+            ->innerJoin(['c' => '{{%collection}}'], 'c.id = e.collection_id')
+            ->innerJoin(['w' => '{{%workspace}}'], 'w.id = e.workspace_id')
+            ->where([
+                'e.workspace_id' => $workspaceId,
+                'c.workspace_id' => $workspaceId,
+                'w.id' => $workspaceId,
+                'e.locale' => $locale,
+            ]);
+    }
+
+    private function requireWorkspaceId(Workspace $workspace): int
+    {
+        $workspaceId = $workspace->getId();
+        if ($workspaceId === null) {
+            throw new InvalidArgumentException('Workspace must have an identifier to be used with repository operations.');
+        }
+
+        return $workspaceId;
+    }
+
+    /**
+     * @return string[]
+     */
+    private function decodeJsonList(null|string $json): array
+    {
+        if ($json === null || $json === '') {
+            return [];
+        }
+
+        $decoded = json_decode((string) $json, true);
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $filtered = array_filter(
+            $decoded,
+            static fn(mixed $value): bool => is_string($value) && $value !== ''
+        );
+
+        return array_values(array_map(
+            static fn(string $value): string => $value,
+            $filtered
+        ));
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function decodeJsonMap(null|string $json): array
+    {
+        if ($json === null || $json === '') {
+            return [];
+        }
+
+        $decoded = json_decode((string) $json, true);
+        return is_array($decoded) ? $decoded : [];
     }
 }

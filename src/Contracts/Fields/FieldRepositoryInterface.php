@@ -20,17 +20,18 @@ declare(strict_types=1);
 namespace Setka\Cms\Contracts\Fields;
 
 use Setka\Cms\Domain\Fields\Field;
+use Setka\Cms\Domain\Workspaces\Workspace;
 
 interface FieldRepositoryInterface
 {
-    public function findById(int $id): ?Field;
+    public function findById(Workspace $workspace, int $id, ?string $locale = null): ?Field;
 
-    public function findByHandle(string $handle): ?Field;
+    public function findByHandle(Workspace $workspace, string $handle, ?string $locale = null): ?Field;
 
     /**
      * Persist field. Inserts when id is null, otherwise updates.
      */
-    public function save(Field $field): void;
+    public function save(Workspace $workspace, Field $field, ?string $locale = null): void;
 
-    public function delete(int $id): void;
+    public function delete(Workspace $workspace, int $id, ?string $locale = null): void;
 }

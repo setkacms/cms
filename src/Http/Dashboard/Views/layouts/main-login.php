@@ -1,11 +1,12 @@
 <?php
 
+use Setka\Cms\Http\Dashboard\Assets\DashboardAsset;
 use yii\helpers\Html;
 
 /* @var $this \yii\web\View */
 /* @var $content string */
 
-dmstr\web\AdminLteAsset::register($this);
+DashboardAsset::register($this);
 ?>
 <?php $this->beginPage() ?>
 <!DOCTYPE html>

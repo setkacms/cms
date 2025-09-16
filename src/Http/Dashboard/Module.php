@@ -7,7 +7,6 @@
 
 namespace Setka\Cms\Http\Dashboard;
 
-use dmstr\web\AdminLteAsset;
 use RuntimeException;
 use yii\base\Module as BaseModule;
 

@@ -1,5 +1,6 @@
 <?php
 
+use Setka\Cms\Http\Dashboard\Assets\DashboardAsset;
 use yii\helpers\Html;
 use yii\web\View;
 
@@ -12,7 +13,7 @@ if (Yii::$app->controller->action->id === 'login') {
     );
     return;
 }
-dmstr\web\AdminLteAsset::register($this);
+DashboardAsset::register($this);
 $directoryAsset = Yii::$app->assetManager->getPublishedUrl('@vendor/almasaeed2010/adminlte/dist');
 ?>
 <?php $this->beginPage() ?>

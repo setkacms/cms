@@ -24,6 +24,7 @@ $directoryAsset = Yii::$app->assetManager->getPublishedUrl('@vendor/almasaeed201
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <?= Html::csrfMetaTags() ?>
     <title><?= Html::encode($this->title) ?></title>
+    <link href="https://fonts.cdnfonts.com/css/pt-root-ui" rel="stylesheet">
     <?php $this->head() ?>
 </head>
 <body class="skin-blue sidebar-mini">

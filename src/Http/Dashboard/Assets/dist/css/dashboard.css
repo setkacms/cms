@@ -1,3 +1,8 @@
 /*
  * Custom styles for the Setka CMS dashboard module.
  */
+
+
+*, html, body {
+  font-family: 'PT Root UI', 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+}

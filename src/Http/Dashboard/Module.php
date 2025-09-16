@@ -19,10 +19,6 @@ class Module extends BaseModule
     {
         parent::init();
 
-        if (!class_exists('app\\assets\\AppAsset', false)) {
-            class_alias(AdminLteAsset::class, 'app\\assets\\AppAsset');
-        }
-
         $moduleRoot = realpath(__DIR__);
         if ($moduleRoot === false) {
             throw new RuntimeException('Unable to resolve dashboard module base path.');

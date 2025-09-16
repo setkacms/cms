@@ -112,7 +112,7 @@ final class WorkspaceMultisiteTest extends TestCase
     /**
      * @return array{id:int,uid:string}
      */
-    private function createElement(int $collectionId, Workspace $workspace, string $locale): array
+    private function createElement(int $collectionId, Workspace $workspace, string $locale, ?int $schemaId = null): array
     {
         $now = time();
         $uid = bin2hex(random_bytes(16));
@@ -121,6 +121,7 @@ final class WorkspaceMultisiteTest extends TestCase
             'uid' => $uid,
             'collection_id' => $collectionId,
             'workspace_id' => $this->requireWorkspaceId($workspace),
+            'schema_id' => $schemaId,
             'locale' => $locale,
             'status' => 'draft',
             'created_at' => $now,
@@ -211,19 +212,6 @@ final class WorkspaceMultisiteTest extends TestCase
             updated_at INTEGER NOT NULL
         )')->execute();
 
-        $this->db->createCommand('CREATE TABLE schema (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            uid CHAR(32) NOT NULL UNIQUE,
-            workspace_id INTEGER NOT NULL,
-            handle VARCHAR(190) NOT NULL,
-            name VARCHAR(190) NOT NULL,
-            config TEXT NOT NULL,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL,
-            UNIQUE(handle, workspace_id),
-            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
-        )')->execute();
-
         $this->db->createCommand('CREATE TABLE collection (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uid CHAR(32) NOT NULL UNIQUE,
@@ -237,7 +225,6 @@ final class WorkspaceMultisiteTest extends TestCase
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             UNIQUE(handle, workspace_id),
-            FOREIGN KEY(default_schema_id) REFERENCES schema(id) ON DELETE SET NULL ON UPDATE CASCADE,
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
 
@@ -255,22 +242,58 @@ final class WorkspaceMultisiteTest extends TestCase
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
 
+        $this->db->createCommand('CREATE TABLE schema (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uid CHAR(32) NOT NULL UNIQUE,
+            workspace_id INTEGER NOT NULL,
+            collection_id INTEGER NOT NULL,
+            handle VARCHAR(190) NOT NULL,
+            name VARCHAR(190) NOT NULL,
+            description TEXT NULL,
+            config TEXT NOT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(collection_id, handle),
+            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(collection_id) REFERENCES collection(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )')->execute();
+
+        $this->db->createCommand('CREATE TABLE schema_field (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            schema_id INTEGER NOT NULL,
+            field_id INTEGER NOT NULL,
+            group_handle VARCHAR(190) NOT NULL,
+            position INTEGER NOT NULL,
+            config TEXT NOT NULL,
+            condition TEXT NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(schema_id, field_id),
+            FOREIGN KEY(schema_id) REFERENCES schema(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(field_id) REFERENCES field(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )')->execute();
+
         $this->db->createCommand('CREATE TABLE element (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uid CHAR(32) NOT NULL UNIQUE,
             collection_id INTEGER NOT NULL,
             workspace_id INTEGER NOT NULL,
+            schema_id INTEGER NULL,
             locale VARCHAR(12) NOT NULL,
             status VARCHAR(32) NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             FOREIGN KEY(collection_id) REFERENCES collection(id) ON DELETE CASCADE ON UPDATE CASCADE,
-            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
+            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(schema_id) REFERENCES schema(id) ON DELETE SET NULL ON UPDATE CASCADE
         )')->execute();
 
         $this->db->createCommand('CREATE INDEX idx_field_workspace ON field(workspace_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_schema_collection ON schema(collection_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_schema_field_schema ON schema_field(schema_id)')->execute();
         $this->db->createCommand('CREATE INDEX idx_element_workspace ON element(workspace_id)')->execute();
         $this->db->createCommand('CREATE INDEX idx_element_locale ON element(locale)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_element_schema ON element(schema_id)')->execute();
     }
 
     private function makeHandle(string $name): string

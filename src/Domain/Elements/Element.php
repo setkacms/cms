@@ -20,6 +20,7 @@ declare(strict_types=1);
 namespace Setka\Cms\Domain\Elements;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use Setka\Cms\Domain\Fields\Field;
 
 /**
@@ -32,6 +33,8 @@ class Element
     private string $uid;
 
     private Collection $collection;
+
+    private ?int $schemaId;
 
     private string $locale;
 
@@ -46,12 +49,19 @@ class Element
 
     private DateTimeImmutable $updatedAt;
 
-    public function __construct(Collection $collection, string $locale, ?int $id = null, ?string $uid = null)
+    public function __construct(
+        Collection $collection,
+        string $locale,
+        ?int $id = null,
+        ?string $uid = null,
+        ?int $schemaId = null
+    )
     {
         $this->collection = $collection;
         $this->locale = $locale;
         $this->id = $id;
         $this->uid = $uid ?? self::generateUid();
+        $this->schemaId = $this->filterSchemaId($schemaId);
         $this->createdAt = new DateTimeImmutable();
         $this->updatedAt = new DateTimeImmutable();
     }
@@ -79,6 +89,22 @@ class Element
     public function getLocale(): string
     {
         return $this->locale;
+    }
+
+    public function getSchemaId(): ?int
+    {
+        return $this->schemaId;
+    }
+
+    public function setSchemaId(?int $schemaId): void
+    {
+        $schemaId = $this->filterSchemaId($schemaId);
+        if ($this->schemaId === $schemaId) {
+            return;
+        }
+
+        $this->schemaId = $schemaId;
+        $this->touch();
     }
 
     public function getStatus(): string
@@ -144,5 +170,18 @@ class Element
     private function touch(): void
     {
         $this->updatedAt = new DateTimeImmutable();
+    }
+
+    private function filterSchemaId(?int $schemaId): ?int
+    {
+        if ($schemaId === null) {
+            return null;
+        }
+
+        if ($schemaId <= 0) {
+            throw new InvalidArgumentException('Schema identifier must be positive.');
+        }
+
+        return $schemaId;
     }
 }

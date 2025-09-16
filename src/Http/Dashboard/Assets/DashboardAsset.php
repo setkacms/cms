@@ -13,9 +13,13 @@ class DashboardAsset extends AssetBundle
 {
     public $sourcePath = __DIR__ . '/dist';
 
-    public $css = [];
+    public $css = [
+        'css/dashboard.css',
+    ];
 
-    public $js = [];
+    public $js = [
+        'js/dashboard.js',
+    ];
 
     public $depends = [
         \dmstr\web\AdminLteAsset::class,

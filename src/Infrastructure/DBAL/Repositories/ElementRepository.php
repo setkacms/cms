@@ -26,6 +26,9 @@ use Setka\Cms\Contracts\Elements\PublicationPlan;
 use Setka\Cms\Domain\Elements\Collection;
 use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Elements\Element;
+use Setka\Cms\Domain\Taxonomy\Taxonomy;
+use Setka\Cms\Domain\Taxonomy\TaxonomyStructure;
+use Setka\Cms\Domain\Taxonomy\Term;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use Throwable;
 use yii\db\Connection;
@@ -107,7 +110,7 @@ final class ElementRepository implements ElementRepositoryInterface
         $status = $this->mapStatus($row['element_status'] ?? null);
         $publicationPlan = $this->decodePublicationPlan($row['element_publication_plan'] ?? null);
 
-        return new Element(
+        $element = new Element(
             collection: $collection,
             locale: (string) $row['element_locale'],
             slug: isset($row['element_slug']) && $row['element_slug'] !== '' ? (string) $row['element_slug'] : null,
@@ -118,6 +121,15 @@ final class ElementRepository implements ElementRepositoryInterface
             publicationPlan: $publicationPlan,
             status: $status,
         );
+
+        $locale = (string) $row['element_locale'];
+        $taxonomyData = $this->loadCollectionTaxonomyData($collection, $locale);
+        if ($taxonomyData !== []) {
+            $collection->setTaxonomies(array_values($taxonomyData['taxonomies']));
+            $this->hydrateElementTerms($element, $taxonomyData['taxonomies'], $taxonomyData['terms'], $locale);
+        }
+
+        return $element;
     }
 
     private function createBaseQuery(Workspace $workspace, string $locale): Query
@@ -241,6 +253,200 @@ final class ElementRepository implements ElementRepositoryInterface
         return ElementStatus::Draft;
     }
 
+    /**
+     * @return array{taxonomies: array<int, Taxonomy>, terms: array<int, Term>}|[]
+     */
+    private function loadCollectionTaxonomyData(Collection $collection, string $locale): array
+    {
+        $collectionId = $collection->getId();
+        $workspaceId = $collection->getWorkspace()->getId();
+
+        if ($collectionId === null || $workspaceId === null) {
+            return [];
+        }
+
+        $rows = (new Query())
+            ->select([
+                'id' => 'tx.id',
+                'uid' => 'tx.uid',
+                'handle' => 'tx.handle',
+                'name' => 'tx.name',
+                'structure' => 'tx.structure',
+            ])
+            ->from(['tx' => '{{%taxonomy}}'])
+            ->where([
+                'tx.collection_id' => $collectionId,
+                'tx.workspace_id' => $workspaceId,
+            ])
+            ->orderBy(['tx.id' => SORT_ASC])
+            ->all($this->db);
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $taxonomies = [];
+        foreach ($rows as $row) {
+            if (!isset($row['id'], $row['handle'], $row['name'])) {
+                continue;
+            }
+
+            $id = (int) $row['id'];
+            $taxonomies[$id] = new Taxonomy(
+                workspace: $collection->getWorkspace(),
+                handle: (string) $row['handle'],
+                name: (string) $row['name'],
+                structure: $this->mapTaxonomyStructure($row['structure'] ?? null),
+                id: $id,
+                uid: isset($row['uid']) ? (string) $row['uid'] : null,
+            );
+        }
+
+        if ($taxonomies === []) {
+            return [];
+        }
+
+        $terms = $this->loadTermsForTaxonomies($taxonomies, $locale);
+
+        return [
+            'taxonomies' => $taxonomies,
+            'terms' => $terms,
+        ];
+    }
+
+    /**
+     * @param array<int, Taxonomy> $taxonomies
+     * @return array<int, Term>
+     */
+    private function loadTermsForTaxonomies(array &$taxonomies, string $locale): array
+    {
+        if ($taxonomies === []) {
+            return [];
+        }
+
+        $rows = (new Query())
+            ->select([
+                'id' => 'tm.id',
+                'uid' => 'tm.uid',
+                'taxonomy_id' => 'tm.taxonomy_id',
+                'parent_id' => 'tm.parent_id',
+                'slug' => 'tm.slug',
+                'name' => 'tm.name',
+                'locale' => 'tm.locale',
+                'position' => 'tm.position',
+            ])
+            ->from(['tm' => '{{%term}}'])
+            ->where([
+                'tm.taxonomy_id' => array_keys($taxonomies),
+                'tm.locale' => $locale,
+            ])
+            ->orderBy([
+                'tm.parent_id' => SORT_ASC,
+                'tm.position' => SORT_ASC,
+                'tm.id' => SORT_ASC,
+            ])
+            ->all($this->db);
+
+        if ($rows === []) {
+            return [];
+        }
+
+        $terms = [];
+        foreach ($rows as $row) {
+            if (!isset($row['id'], $row['taxonomy_id'], $row['slug'], $row['name'], $row['locale'])) {
+                continue;
+            }
+
+            $taxonomyId = (int) $row['taxonomy_id'];
+            $taxonomy = $taxonomies[$taxonomyId] ?? null;
+            if ($taxonomy === null) {
+                continue;
+            }
+
+            $termId = (int) $row['id'];
+            $term = new Term(
+                taxonomy: $taxonomy,
+                slug: (string) $row['slug'],
+                name: (string) $row['name'],
+                locale: (string) $row['locale'],
+                position: isset($row['position']) ? (int) $row['position'] : 0,
+                id: $termId,
+                uid: isset($row['uid']) ? (string) $row['uid'] : null,
+            );
+
+            $taxonomy->addTerm($term);
+            $terms[$termId] = $term;
+        }
+
+        foreach ($rows as $row) {
+            if (!isset($row['id'])) {
+                continue;
+            }
+
+            $parentId = $row['parent_id'] ?? null;
+            if ($parentId === null) {
+                continue;
+            }
+
+            $termId = (int) $row['id'];
+            $term = $terms[$termId] ?? null;
+            $parent = $terms[(int) $parentId] ?? null;
+            if ($term === null || $parent === null) {
+                continue;
+            }
+
+            $term->setParent($parent);
+        }
+
+        return $terms;
+    }
+
+    /**
+     * @param array<int, Taxonomy> $taxonomies
+     * @param array<int, Term> $terms
+     */
+    private function hydrateElementTerms(Element $element, array $taxonomies, array $terms, string $locale): void
+    {
+        $elementId = $element->getId();
+        if ($elementId === null || $taxonomies === [] || $terms === []) {
+            return;
+        }
+
+        $rows = (new Query())
+            ->select([
+                'term_id' => 'et.term_id',
+                'taxonomy_id' => 'et.taxonomy_id',
+                'position' => 'et.position',
+            ])
+            ->from(['et' => '{{%element_term}}'])
+            ->where([
+                'et.element_id' => $elementId,
+                'et.locale' => $locale,
+            ])
+            ->orderBy([
+                'et.position' => SORT_ASC,
+                'et.term_id' => SORT_ASC,
+            ])
+            ->all($this->db);
+
+        foreach ($rows as $row) {
+            if (!isset($row['term_id'], $row['taxonomy_id'])) {
+                continue;
+            }
+
+            $termId = (int) $row['term_id'];
+            $taxonomyId = (int) $row['taxonomy_id'];
+            $term = $terms[$termId] ?? null;
+            $taxonomy = $taxonomies[$taxonomyId] ?? null;
+            if ($term === null || $taxonomy === null) {
+                continue;
+            }
+
+            $position = isset($row['position']) ? (int) $row['position'] : null;
+            $element->assignTerm($term, $position);
+        }
+    }
+
     private function decodePublicationPlan(null|string $json): ?PublicationPlan
     {
         if ($json === null || $json === '') {
@@ -268,6 +474,18 @@ final class ElementRepository implements ElementRepositoryInterface
         }
 
         return CollectionStructure::FLAT;
+    }
+
+    private function mapTaxonomyStructure(mixed $value): TaxonomyStructure
+    {
+        if (is_string($value)) {
+            $structure = TaxonomyStructure::tryFrom(strtolower($value));
+            if ($structure !== null) {
+                return $structure;
+            }
+        }
+
+        return TaxonomyStructure::FLAT;
     }
 }
 

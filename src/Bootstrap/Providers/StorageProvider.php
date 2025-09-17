@@ -22,6 +22,7 @@ use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Filesystem;
 use League\Flysystem\FilesystemOperator;
 use League\Flysystem\Local\LocalFilesystemAdapter;
+use Setka\Cms\Infrastructure\Storage\AssetStorage;
 use Setka\Cms\Infrastructure\Storage\FlysystemStorage;
 use yii\di\Container;
 
@@ -74,6 +75,11 @@ class StorageProvider implements ProviderInterface
             return new FlysystemStorage($c->get(FilesystemOperator::class));
         });
         $c->set('storage', FlysystemStorage::class);
+
+        $c->set(AssetStorage::class, static function (Container $c) {
+            return new AssetStorage($c->get(FlysystemStorage::class));
+        });
+        $c->set('assetStorage', AssetStorage::class);
     }
 }
 

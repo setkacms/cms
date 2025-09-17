@@ -20,6 +20,7 @@ declare(strict_types=1);
 namespace Setka\Cms\Domain\Fields;
 
 use DateTimeInterface;
+use function trim;
 
 /**
  * Типы полей.
@@ -94,8 +95,20 @@ enum FieldType: string
                 return false;
             }
 
-            if (isset($item['variants']) && !is_array($item['variants'])) {
-                return false;
+            if (isset($item['variants'])) {
+                if (!is_array($item['variants'])) {
+                    return false;
+                }
+
+                foreach ($item['variants'] as $variant) {
+                    if (!is_string($variant)) {
+                        return false;
+                    }
+
+                    if (trim($variant) === '') {
+                        return false;
+                    }
+                }
             }
         }
 

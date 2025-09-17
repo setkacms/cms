@@ -27,6 +27,8 @@ use Setka\Cms\Contracts\Elements\ElementStatus;
 use Setka\Cms\Contracts\Elements\PublicationPlan;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Schemas\Schema;
+use Setka\Cms\Domain\Taxonomy\Taxonomy;
+use Setka\Cms\Domain\Taxonomy\Term;
 
 final class Element implements ElementInterface
 {
@@ -55,6 +57,11 @@ final class Element implements ElementInterface
     private array $currentVersions = [];
 
     private ?PublicationPlan $publicationPlan;
+
+    /**
+     * @var array<string, array<string, array{term: Term, position: int}>>
+     */
+    private array $terms = [];
 
     private DateTimeImmutable $createdAt;
 
@@ -267,6 +274,141 @@ final class Element implements ElementInterface
         $this->touch();
     }
 
+    public function assignTerm(Term $term, ?int $position = null): void
+    {
+        $taxonomy = $term->getTaxonomy();
+        $this->assertTaxonomySupported($taxonomy);
+
+        $taxonomyKey = $taxonomy->getUid();
+        $termKey = $term->getUid();
+        $position = $this->normaliseAssignmentPosition($taxonomyKey, $position);
+
+        $current = $this->terms[$taxonomyKey][$termKey] ?? null;
+        if ($current !== null && $current['position'] === $position) {
+            return;
+        }
+
+        $this->terms[$taxonomyKey][$termKey] = [
+            'term' => $term,
+            'position' => $position,
+        ];
+
+        $this->touch();
+    }
+
+    /**
+     * @param array<int, array{term: Term, position: int}> $assignments
+     */
+    public function setTermsForTaxonomy(Taxonomy $taxonomy, array $assignments): void
+    {
+        $this->assertTaxonomySupported($taxonomy);
+        $taxonomyKey = $taxonomy->getUid();
+
+        $normalised = [];
+        foreach ($assignments as $assignment) {
+            if (!is_array($assignment) || !isset($assignment['term'])) {
+                throw new InvalidArgumentException('Invalid term assignment payload.');
+            }
+
+            $term = $assignment['term'];
+            if (!$term instanceof Term) {
+                throw new InvalidArgumentException('Assignment term must be a taxonomy term instance.');
+            }
+
+            if ($term->getTaxonomy() !== $taxonomy) {
+                throw new InvalidArgumentException('Term belongs to a different taxonomy.');
+            }
+
+            $position = $assignment['position'] ?? null;
+            if (!is_int($position)) {
+                throw new InvalidArgumentException('Assignment must contain integer position.');
+            }
+
+            if ($position < 0) {
+                throw new InvalidArgumentException('Assignment position must be non-negative.');
+            }
+
+            $normalised[$term->getUid()] = [
+                'term' => $term,
+                'position' => $position,
+            ];
+        }
+
+        if ($normalised === []) {
+            if (isset($this->terms[$taxonomyKey])) {
+                unset($this->terms[$taxonomyKey]);
+                $this->touch();
+            }
+
+            return;
+        }
+
+        uasort($normalised, static fn(array $left, array $right): int => $left['position'] <=> $right['position']);
+
+        $current = $this->terms[$taxonomyKey] ?? null;
+        if ($current !== null && $this->termAssignmentsEqual($current, $normalised)) {
+            return;
+        }
+
+        $this->terms[$taxonomyKey] = $normalised;
+        $this->touch();
+    }
+
+    public function clearTermsForTaxonomy(Taxonomy $taxonomy): void
+    {
+        $taxonomyKey = $taxonomy->getUid();
+        if (!isset($this->terms[$taxonomyKey])) {
+            return;
+        }
+
+        unset($this->terms[$taxonomyKey]);
+        $this->touch();
+    }
+
+    public function removeTerm(Term $term): void
+    {
+        $taxonomyKey = $term->getTaxonomy()->getUid();
+        $termKey = $term->getUid();
+
+        if (!isset($this->terms[$taxonomyKey][$termKey])) {
+            return;
+        }
+
+        unset($this->terms[$taxonomyKey][$termKey]);
+        if ($this->terms[$taxonomyKey] === []) {
+            unset($this->terms[$taxonomyKey]);
+        }
+
+        $this->touch();
+    }
+
+    /**
+     * @return Term[]
+     */
+    public function getTerms(?Taxonomy $taxonomy = null): array
+    {
+        if ($taxonomy === null) {
+            $result = [];
+            foreach ($this->terms as $assignments) {
+                $result = array_merge($result, $this->mapAssignmentsToTerms($assignments));
+            }
+
+            return $result;
+        }
+
+        $this->assertTaxonomySupported($taxonomy);
+        $assignments = $this->terms[$taxonomy->getUid()] ?? [];
+
+        return $this->mapAssignmentsToTerms($assignments);
+    }
+
+    public function hasTerm(Term $term): bool
+    {
+        $taxonomyKey = $term->getTaxonomy()->getUid();
+
+        return isset($this->terms[$taxonomyKey][$term->getUid()]);
+    }
+
     public function createDraft(?string $locale = null): ElementVersion
     {
         $locale = $this->assertLocale($locale ?? $this->locale);
@@ -404,6 +546,78 @@ final class Element implements ElementInterface
     public function getUpdatedAt(): DateTimeImmutable
     {
         return $this->updatedAt;
+    }
+
+    /**
+     * @param array<string, array{term: Term, position: int}> $assignments
+     * @return Term[]
+     */
+    private function mapAssignmentsToTerms(array $assignments): array
+    {
+        if ($assignments === []) {
+            return [];
+        }
+
+        uasort($assignments, static fn(array $a, array $b): int => $a['position'] <=> $b['position']);
+
+        return array_values(array_map(
+            static fn(array $assignment): Term => $assignment['term'],
+            $assignments
+        ));
+    }
+
+    private function normaliseAssignmentPosition(string $taxonomyKey, ?int $position): int
+    {
+        if ($position === null) {
+            $assignments = $this->terms[$taxonomyKey] ?? [];
+            if ($assignments === []) {
+                return 0;
+            }
+
+            $max = max(array_map(
+                static fn(array $assignment): int => $assignment['position'],
+                $assignments
+            ));
+
+            return $max + 1;
+        }
+
+        if ($position < 0) {
+            throw new InvalidArgumentException('Term assignment position must be non-negative.');
+        }
+
+        return $position;
+    }
+
+    /**
+     * @param array<string, array{term: Term, position: int}> $current
+     * @param array<string, array{term: Term, position: int}> $next
+     */
+    private function termAssignmentsEqual(array $current, array $next): bool
+    {
+        if (count($current) !== count($next)) {
+            return false;
+        }
+
+        foreach ($current as $uid => $assignment) {
+            $candidate = $next[$uid] ?? null;
+            if ($candidate === null) {
+                return false;
+            }
+
+            if ($assignment['term'] !== $candidate['term'] || $assignment['position'] !== $candidate['position']) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private function assertTaxonomySupported(Taxonomy $taxonomy): void
+    {
+        if (!$this->collection->supportsTaxonomy($taxonomy)) {
+            throw new InvalidArgumentException('Collection does not support provided taxonomy.');
+        }
     }
 
     private function resolveVersion(?string $locale, ?int $version): ?ElementVersion

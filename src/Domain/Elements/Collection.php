@@ -22,6 +22,7 @@ namespace Setka\Cms\Domain\Elements;
 use DateTimeImmutable;
 use InvalidArgumentException;
 use Setka\Cms\Domain\Fields\Field;
+use Setka\Cms\Domain\Taxonomy\Taxonomy;
 use Setka\Cms\Domain\Workspaces\Workspace;
 
 /**
@@ -51,6 +52,9 @@ class Collection
 
     /** @var array<int|string, mixed> */
     private array $publicationRules;
+
+    /** @var array<string, Taxonomy> */
+    private array $taxonomies = [];
 
     private DateTimeImmutable $createdAt;
 
@@ -202,6 +206,61 @@ class Collection
         $this->touch();
     }
 
+    /**
+     * @return Taxonomy[]
+     */
+    public function getTaxonomies(): array
+    {
+        return array_values($this->taxonomies);
+    }
+
+    public function allowTaxonomy(Taxonomy $taxonomy): void
+    {
+        $this->assertTaxonomyWorkspace($taxonomy);
+
+        $key = $taxonomy->getUid();
+        if (isset($this->taxonomies[$key])) {
+            return;
+        }
+
+        $this->taxonomies[$key] = $taxonomy;
+        $this->touch();
+    }
+
+    public function disallowTaxonomy(Taxonomy $taxonomy): void
+    {
+        $key = $taxonomy->getUid();
+        if (!isset($this->taxonomies[$key])) {
+            return;
+        }
+
+        unset($this->taxonomies[$key]);
+        $this->touch();
+    }
+
+    /**
+     * @param Taxonomy[] $taxonomies
+     */
+    public function setTaxonomies(array $taxonomies): void
+    {
+        $this->taxonomies = [];
+        foreach ($taxonomies as $taxonomy) {
+            if (!$taxonomy instanceof Taxonomy) {
+                throw new InvalidArgumentException('Taxonomy collection expects taxonomy instances.');
+            }
+
+            $this->assertTaxonomyWorkspace($taxonomy);
+            $this->taxonomies[$taxonomy->getUid()] = $taxonomy;
+        }
+
+        $this->touch();
+    }
+
+    public function supportsTaxonomy(Taxonomy $taxonomy): bool
+    {
+        return isset($this->taxonomies[$taxonomy->getUid()]);
+    }
+
     public function addField(Field $field): void
     {
         $this->fields[$field->getHandle()] = $field;
@@ -253,6 +312,13 @@ class Collection
     private function normaliseRules(array $rules): array
     {
         return $rules;
+    }
+
+    private function assertTaxonomyWorkspace(Taxonomy $taxonomy): void
+    {
+        if ($taxonomy->getWorkspace()->getUid() !== $this->workspace->getUid()) {
+            throw new InvalidArgumentException('Taxonomy must belong to the same workspace as the collection.');
+        }
     }
 
     private function assertHandle(string $handle): void

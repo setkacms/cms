@@ -8,7 +8,7 @@
  *
  * @package   Setka CMS
  * @version   1.0.0
- * @author    Vitaliy Kamelин <v.kamelин@gmail.com>
+ * @author    Vitaliy Kamelin <v.kamelin@gmail.com>
  * @license   Proprietary
  *
  * https://github.com/setkacms/cms
@@ -19,15 +19,15 @@ declare(strict_types=1);
 
 namespace Setka\Cms\Contracts\Fields;
 
+use Setka\Cms\Domain\Elements\ElementVersion;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Workspaces\Workspace;
 
 interface FieldValueRepositoryInterface
 {
-    public function find(Workspace $workspace, int $elementId, Field $field, ?string $locale = null): mixed;
+    public function find(Workspace $workspace, ElementVersion $version, Field $field, ?string $locale = null): mixed;
 
-    public function save(Workspace $workspace, int $elementId, Field $field, mixed $value, ?string $locale = null): void;
+    public function save(Workspace $workspace, ElementVersion $version, Field $field, mixed $value, ?string $locale = null): void;
 
-    public function delete(Workspace $workspace, int $elementId, Field $field, ?string $locale = null): void;
+    public function delete(Workspace $workspace, ElementVersion $version, Field $field, ?string $locale = null): void;
 }
-

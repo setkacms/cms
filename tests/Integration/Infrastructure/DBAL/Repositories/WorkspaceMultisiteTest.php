@@ -7,6 +7,7 @@ use PHPUnit\Framework\TestCase;
 use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Fields\FieldType;
+use Setka\Cms\Contracts\Elements\ElementStatus;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use Setka\Cms\Infrastructure\DBAL\Repositories\ElementRepository;
 use Setka\Cms\Infrastructure\DBAL\Repositories\FieldRepository;
@@ -91,12 +92,19 @@ final class WorkspaceMultisiteTest extends TestCase
         $elementEn = $this->elementRepository->findByUid($this->defaultWorkspace, $defaultEn['uid'], 'en-US');
         $elementDe = $this->elementRepository->findByUid($this->defaultWorkspace, $defaultDe['uid'], 'de-DE');
 
-        $this->assertNotNull($elementEn);
+
+        self::assertNotNull($elementEn);
+        self::assertSame('Element en-US', $elementEn->getTitle());
+        self::assertStringContainsString('element-en-us', $elementEn->getSlug());
+        self::assertSame(ElementStatus::Draft, $elementEn->getStatus());
+        self::assertNull($elementEn->getPublicationPlan());
         $this->assertSame('en-US', $elementEn->getLocale());
         $this->assertSame('articles', $elementEn->getCollection()->getHandle());
         $this->assertTrue($elementEn->getCollection()->isFlat());
 
         $this->assertNotNull($elementDe);
+        self::assertSame('Element de-DE', $elementDe->getTitle());
+        self::assertStringContainsString('element-de-de', $elementDe->getSlug());
         $this->assertSame('de-DE', $elementDe->getLocale());
 
         $this->assertNull($this->elementRepository->findByUid($this->defaultWorkspace, $defaultEn['uid'], 'de-DE'));
@@ -116,13 +124,19 @@ final class WorkspaceMultisiteTest extends TestCase
     {
         $now = time();
         $uid = bin2hex(random_bytes(16));
+        $slug = $this->makeHandle('element-' . $locale . '-' . substr($uid, 0, 8));
+        $title = 'Element ' . $locale;
 
         $this->db->createCommand()->insert('element', [
             'uid' => $uid,
             'collection_id' => $collectionId,
             'workspace_id' => $this->requireWorkspaceId($workspace),
             'locale' => $locale,
-            'status' => 'draft',
+            'slug' => $slug,
+            'title' => $title,
+            'status' => ElementStatus::Draft->value,
+            'schema_id' => null,
+            'publication_plan' => null,
             'created_at' => $now,
             'updated_at' => $now,
         ])->execute();
@@ -241,19 +255,24 @@ final class WorkspaceMultisiteTest extends TestCase
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
 
-        $this->db->createCommand('CREATE TABLE field (
+        $this->db->createCommand("CREATE TABLE field (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             uid CHAR(32) NOT NULL UNIQUE,
             handle VARCHAR(190) NOT NULL,
             name VARCHAR(190) NOT NULL,
             type VARCHAR(32) NOT NULL,
             required INTEGER NOT NULL DEFAULT 0,
+            settings TEXT NOT NULL DEFAULT '{}',
+            localized INTEGER NOT NULL DEFAULT 0,
+            is_unique INTEGER NOT NULL DEFAULT 0,
+            searchable INTEGER NOT NULL DEFAULT 0,
+            multi_valued INTEGER NOT NULL DEFAULT 0,
             workspace_id INTEGER NOT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             UNIQUE(handle, workspace_id),
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
-        )')->execute();
+        )")->execute();
 
         $this->db->createCommand('CREATE TABLE element (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -261,16 +280,61 @@ final class WorkspaceMultisiteTest extends TestCase
             collection_id INTEGER NOT NULL,
             workspace_id INTEGER NOT NULL,
             locale VARCHAR(12) NOT NULL,
-            status VARCHAR(32) NOT NULL,
+            slug VARCHAR(190) NOT NULL,
+            title VARCHAR(190) NOT NULL,
+            status INTEGER NOT NULL,
+            schema_id INTEGER NULL,
+            publication_plan TEXT NULL,
             created_at INTEGER NOT NULL,
             updated_at INTEGER NOT NULL,
             FOREIGN KEY(collection_id) REFERENCES collection(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(schema_id) REFERENCES schema(id) ON DELETE SET NULL ON UPDATE CASCADE
+        )')->execute();
+
+        $this->db->createCommand('CREATE TABLE element_version (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            uid CHAR(32) NOT NULL UNIQUE,
+            element_id INTEGER NOT NULL,
+            locale VARCHAR(12) NOT NULL,
+            number INTEGER NOT NULL,
+            status INTEGER NOT NULL,
+            published_at INTEGER NULL,
+            archived_at INTEGER NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            UNIQUE(element_id, locale, number),
+            FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE ON UPDATE CASCADE
+        )')->execute();
+
+        $this->db->createCommand('CREATE TABLE field_value (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id INTEGER NOT NULL,
+            element_id INTEGER NOT NULL,
+            field_id INTEGER NOT NULL,
+            field_handle VARCHAR(190) NOT NULL,
+            workspace_id INTEGER NOT NULL,
+            locale VARCHAR(12) NOT NULL,
+            value_json TEXT NOT NULL,
+            search_value VARCHAR(512) NULL,
+            created_at INTEGER NOT NULL,
+            updated_at INTEGER NOT NULL,
+            FOREIGN KEY(version_id) REFERENCES element_version(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(element_id) REFERENCES element(id) ON DELETE CASCADE ON UPDATE CASCADE,
+            FOREIGN KEY(field_id) REFERENCES field(id) ON DELETE CASCADE ON UPDATE CASCADE,
             FOREIGN KEY(workspace_id) REFERENCES workspace(id) ON DELETE CASCADE ON UPDATE CASCADE
         )')->execute();
 
         $this->db->createCommand('CREATE INDEX idx_field_workspace ON field(workspace_id)')->execute();
         $this->db->createCommand('CREATE INDEX idx_element_workspace ON element(workspace_id)')->execute();
         $this->db->createCommand('CREATE INDEX idx_element_locale ON element(locale)')->execute();
+        $this->db->createCommand('CREATE UNIQUE INDEX ux_element_workspace_slug_locale ON element(workspace_id, slug, locale)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_element_schema ON element(schema_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_element_version_element ON element_version(element_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_field_value_version ON field_value(version_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_field_value_field ON field_value(field_id)')->execute();
+        $this->db->createCommand('CREATE INDEX idx_field_value_workspace ON field_value(workspace_id)')->execute();
+        $this->db->createCommand('CREATE UNIQUE INDEX ux_field_value_version_field_locale ON field_value(version_id, field_id, locale)')->execute();
     }
 
     private function makeHandle(string $name): string
@@ -282,3 +346,5 @@ final class WorkspaceMultisiteTest extends TestCase
         return $sanitised !== '' ? $sanitised : 'collection';
     }
 }
+
+

@@ -8,7 +8,7 @@
  *
  * @package   Setka CMS
  * @version   1.0.0
- * @author    Vitaliy Kamelин <v.kamelин@gmail.com>
+ * @author    Vitaliy Kamelin <v.kamelin@gmail.com>
  * @license   Proprietary
  *
  * https://github.com/setkacms/cms
@@ -20,11 +20,11 @@ declare(strict_types=1);
 namespace Setka\Cms\Domain\Elements;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
+use Setka\Cms\Contracts\Elements\ElementStatus;
+use function array_key_exists;
 
-/**
- * Версия элемента.
- */
-class ElementVersion
+final class ElementVersion
 {
     private ?int $id;
 
@@ -32,48 +32,200 @@ class ElementVersion
 
     private Element $element;
 
-    private int $version;
+    private string $locale;
+
+    private int $number;
 
     /** @var array<string, mixed> */
-    private array $data;
+    private array $values;
 
-    private string $status = 'draft';
+    private ElementStatus $status;
 
     private DateTimeImmutable $createdAt;
 
-    public function __construct(Element $element, array $data, int $version = 1, ?int $id = null, ?string $uid = null)
-    {
+    private DateTimeImmutable $updatedAt;
+
+    private ?DateTimeImmutable $publishedAt;
+
+    private ?DateTimeImmutable $archivedAt;
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    public function __construct(
+        Element $element,
+        string $locale,
+        int $number,
+        array $values = [],
+        ?int $id = null,
+        ?string $uid = null,
+        ElementStatus $status = ElementStatus::Draft,
+        ?DateTimeImmutable $createdAt = null,
+        ?DateTimeImmutable $updatedAt = null,
+        ?DateTimeImmutable $publishedAt = null,
+        ?DateTimeImmutable $archivedAt = null,
+    ) {
+        if ($number <= 0) {
+            throw new InvalidArgumentException('Version number must be positive.');
+        }
+
         $this->element = $element;
-        $this->data = $data;
-        $this->version = $version;
+        $this->locale = $this->assertLocale($locale);
+        $this->number = $number;
+        $this->values = $this->normaliseValues($values);
         $this->id = $id;
         $this->uid = $uid ?? Element::generateUid();
-        $this->createdAt = new DateTimeImmutable();
+        $this->status = $status;
+        $this->createdAt = $createdAt ?? new DateTimeImmutable();
+        $this->updatedAt = $updatedAt ?? new DateTimeImmutable();
+        $this->publishedAt = $publishedAt;
+        $this->archivedAt = $archivedAt;
     }
 
-    public function publish(): void
+    public function getElement(): Element
     {
-        $this->status = 'published';
+        return $this->element;
     }
 
-    public function archive(): void
+    public function getId(): ?int
     {
-        $this->status = 'archived';
+        return $this->id;
     }
 
-    public function getData(): array
+    public function getUid(): string
     {
-        return $this->data;
+        return $this->uid;
     }
 
-    public function getVersion(): int
+    public function getLocale(): string
     {
-        return $this->version;
+        return $this->locale;
+    }
+
+    public function getNumber(): int
+    {
+        return $this->number;
+    }
+
+    public function getStatus(): ElementStatus
+    {
+        return $this->status;
+    }
+
+    public function markDraft(): void
+    {
+        $this->status = ElementStatus::Draft;
+        $this->archivedAt = null;
+        $this->touch();
+    }
+
+    public function markPublished(): void
+    {
+        $this->status = ElementStatus::Published;
+        $this->publishedAt = new DateTimeImmutable();
+        $this->archivedAt = null;
+        $this->touch();
+    }
+
+    public function markArchived(): void
+    {
+        $this->status = ElementStatus::Archived;
+        $this->archivedAt = new DateTimeImmutable();
+        $this->touch();
     }
 
     public function getCreatedAt(): DateTimeImmutable
     {
         return $this->createdAt;
     }
-}
 
+    public function getUpdatedAt(): DateTimeImmutable
+    {
+        return $this->updatedAt;
+    }
+
+    public function getPublishedAt(): ?DateTimeImmutable
+    {
+        return $this->publishedAt;
+    }
+
+    public function getArchivedAt(): ?DateTimeImmutable
+    {
+        return $this->archivedAt;
+    }
+
+    public function setValue(string $handle, mixed $value): void
+    {
+        $handle = $this->assertHandle($handle);
+        $this->values[$handle] = $value;
+        $this->touch();
+    }
+
+    public function hasValue(string $handle): bool
+    {
+        return array_key_exists($handle, $this->values);
+    }
+
+    public function getValueByHandle(string $handle): mixed
+    {
+        $handle = $this->assertHandle($handle);
+
+        return $this->values[$handle] ?? null;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function getValues(): array
+    {
+        return $this->values;
+    }
+
+    private function touch(): void
+    {
+        $this->updatedAt = new DateTimeImmutable();
+    }
+
+    private function assertLocale(string $locale): string
+    {
+        $locale = trim($locale);
+        if ($locale === '') {
+            throw new InvalidArgumentException('Locale must not be empty.');
+        }
+
+        return $locale;
+    }
+
+    private function assertHandle(string $handle): string
+    {
+        $handle = trim($handle);
+        if ($handle === '') {
+            throw new InvalidArgumentException('Field handle must not be empty.');
+        }
+
+        return $handle;
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     * @return array<string, mixed>
+     */
+    private function normaliseValues(array $values): array
+    {
+        $normalised = [];
+        foreach ($values as $handle => $value) {
+            if (!is_string($handle)) {
+                continue;
+            }
+
+            $key = trim($handle);
+            if ($key === '') {
+                continue;
+            }
+
+            $normalised[$key] = $value;
+        }
+
+        return $normalised;
+    }
+}

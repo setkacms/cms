@@ -2,13 +2,13 @@
 /*
  * This file is part of Setka CMS.
  *
- * Copyright (c) 2025 Vitaliy Kamelин. All rights reserved.
+ * Copyright (c) 2025 Vitaliy KamelРёРЅ. All rights reserved.
  * Proprietary license. Unauthorized copying, modification or distribution
  * of this file, via any medium, is strictly prohibited without prior written permission.
  *
  * @package   Setka CMS
  * @version   1.0.0
- * @author    Vitaliy Kamelин <v.kamelин@gmail.com>
+ * @author    Vitaliy KamelРёРЅ <v.kamelРёРЅ@gmail.com>
  * @license   Proprietary
  *
  * https://github.com/setkacms/cms
@@ -19,9 +19,11 @@ declare(strict_types=1);
 
 use yii\db\Migration;
 use yii\db\Schema;
+use yii\db\Expression;
+use Setka\Cms\Contracts\Elements\ElementStatus;
 
 /**
- * Создает таблицы схем и связь с полями и элементами.
+ * РЎРѕР·РґР°РµС‚ С‚Р°Р±Р»РёС†С‹ СЃС…РµРј Рё СЃРІСЏР·СЊ СЃ РїРѕР»СЏРјРё Рё СЌР»РµРјРµРЅС‚Р°РјРё.
  */
 final class m240701_120000_create_schema_tables extends Migration
 {
@@ -220,16 +222,47 @@ final class m240701_120000_create_schema_tables extends Migration
             $this->addColumn('{{%element}}', 'schema_id', $this->integer()->null());
         }
 
+        if ($elementTable->getColumn('slug') === null) {
+            $this->addColumn('{{%element}}', 'slug', $this->string(190)->notNull()->defaultValue(''));
+            $this->db->createCommand()->update('{{%element}}', ['slug' => new Expression('uid')])->execute();
+            $this->alterColumn('{{%element}}', 'slug', $this->string(190)->notNull());
+        }
+
+        if ($elementTable->getColumn('title') === null) {
+            $this->addColumn('{{%element}}', 'title', $this->string(190)->notNull()->defaultValue('Untitled element'));
+        }
+
+        if ($elementTable->getColumn('publication_plan') === null) {
+            $this->addColumn('{{%element}}', 'publication_plan', $this->json()->null());
+        }
+
+        $statusColumn = $elementTable->getColumn('status');
+        if ($statusColumn === null) {
+            $this->addColumn('{{%element}}', 'status', $this->smallInteger()->notNull()->defaultValue(ElementStatus::Draft->value));
+        } elseif ($statusColumn->type !== Schema::TYPE_SMALLINT) {
+            $this->db->createCommand()->update('{{%element}}', ['status' => (string) ElementStatus::Published->value], ['status' => 'published'])->execute();
+            $this->db->createCommand()->update('{{%element}}', ['status' => (string) ElementStatus::Archived->value], ['status' => 'archived'])->execute();
+            $this->db->createCommand()->update('{{%element}}', ['status' => (string) ElementStatus::Draft->value], ['status' => 'draft'])->execute();
+            $this->alterColumn('{{%element}}', 'status', $this->smallInteger()->notNull()->defaultValue(ElementStatus::Draft->value));
+        }
+
         $indexes = $schema->getTableIndexes('{{%element}}');
         $hasSchemaIndex = false;
+        $hasSlugIndex = false;
         foreach ($indexes as $index) {
             if ($index->name === 'idx_element_schema') {
                 $hasSchemaIndex = true;
-                break;
+            }
+            if ($index->name === 'ux_element_workspace_slug_locale') {
+                $hasSlugIndex = true;
             }
         }
         if (!$hasSchemaIndex) {
             $this->createIndex('idx_element_schema', '{{%element}}', 'schema_id');
+        }
+
+        if (!$hasSlugIndex) {
+            $this->createIndex('ux_element_workspace_slug_locale', '{{%element}}', ['workspace_id', 'slug', 'locale'], true);
         }
 
         $foreignKeys = $schema->getTableForeignKeys('{{%element}}');
@@ -244,7 +277,6 @@ final class m240701_120000_create_schema_tables extends Migration
             $this->addForeignKey('fk_element_schema', '{{%element}}', 'schema_id', '{{%schema}}', 'id', 'SET NULL', 'CASCADE');
         }
     }
-
     private function rollbackElementSchemaColumn(Schema $schema): void
     {
         $elementTable = $schema->getTableSchema('{{%element}}', true);
@@ -262,17 +294,35 @@ final class m240701_120000_create_schema_tables extends Migration
 
         $indexes = $schema->getTableIndexes('{{%element}}');
         foreach ($indexes as $index) {
+            if ($index->name === 'ux_element_workspace_slug_locale') {
+                $this->dropIndex('ux_element_workspace_slug_locale', '{{%element}}');
+            }
             if ($index->name === 'idx_element_schema') {
                 $this->dropIndex('idx_element_schema', '{{%element}}');
-                break;
             }
+        }
+
+        $statusColumn = $elementTable->getColumn('status');
+        if ($statusColumn !== null && $statusColumn->type !== Schema::TYPE_STRING) {
+            $this->alterColumn('{{%element}}', 'status', $this->string(32)->notNull()->defaultValue('draft'));
+        }
+
+        if ($elementTable->getColumn('publication_plan') !== null) {
+            $this->dropColumn('{{%element}}', 'publication_plan');
+        }
+
+        if ($elementTable->getColumn('title') !== null) {
+            $this->dropColumn('{{%element}}', 'title');
+        }
+
+        if ($elementTable->getColumn('slug') !== null) {
+            $this->dropColumn('{{%element}}', 'slug');
         }
 
         if ($elementTable->getColumn('schema_id') !== null) {
             $this->dropColumn('{{%element}}', 'schema_id');
         }
     }
-
     private function rollbackSchemaFieldTable(Schema $schema): void
     {
         $schemaFieldTable = $schema->getTableSchema('{{%schema_field}}', true);
@@ -345,3 +395,9 @@ final class m240701_120000_create_schema_tables extends Migration
         }
     }
 }
+
+
+
+
+
+

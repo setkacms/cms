@@ -21,10 +21,13 @@ namespace Setka\Cms\Infrastructure\DBAL\Repositories;
 
 use InvalidArgumentException;
 use Setka\Cms\Contracts\Elements\ElementRepositoryInterface;
+use Setka\Cms\Contracts\Elements\ElementStatus;
+use Setka\Cms\Contracts\Elements\PublicationPlan;
 use Setka\Cms\Domain\Elements\Collection;
 use Setka\Cms\Domain\Elements\CollectionStructure;
 use Setka\Cms\Domain\Elements\Element;
 use Setka\Cms\Domain\Workspaces\Workspace;
+use Throwable;
 use yii\db\Connection;
 use yii\db\Query;
 
@@ -57,7 +60,7 @@ final class ElementRepository implements ElementRepositoryInterface
         // The current domain model does not expose collection accessor or mutators
         // for status/timestamps, so a robust save() cannot be implemented yet.
         // Intentionally left as a no-op until the domain API is expanded.
-        // @see Setka\\Cms\\Domain\\Elements\\Element
+        // @see Setka\Cms\Domain\Elements\Element
     }
 
     public function delete(Workspace $workspace, int $id, string $locale): void
@@ -101,12 +104,19 @@ final class ElementRepository implements ElementRepositoryInterface
             uid: isset($row['collection_uid']) ? (string) $row['collection_uid'] : null,
         );
 
+        $status = $this->mapStatus($row['element_status'] ?? null);
+        $publicationPlan = $this->decodePublicationPlan($row['element_publication_plan'] ?? null);
+
         return new Element(
             collection: $collection,
             locale: (string) $row['element_locale'],
+            slug: isset($row['element_slug']) && $row['element_slug'] !== '' ? (string) $row['element_slug'] : null,
+            title: isset($row['element_title']) && $row['element_title'] !== '' ? (string) $row['element_title'] : null,
             id: isset($row['element_id']) ? (int) $row['element_id'] : null,
             uid: isset($row['element_uid']) ? (string) $row['element_uid'] : null,
             schemaId: isset($row['element_schema_id']) ? (int) $row['element_schema_id'] : null,
+            publicationPlan: $publicationPlan,
+            status: $status,
         );
     }
 
@@ -119,6 +129,10 @@ final class ElementRepository implements ElementRepositoryInterface
                 'element_id' => 'e.id',
                 'element_uid' => 'e.uid',
                 'element_locale' => 'e.locale',
+                'element_slug' => 'e.slug',
+                'element_title' => 'e.title',
+                'element_status' => 'e.status',
+                'element_publication_plan' => 'e.publication_plan',
                 'element_schema_id' => 'e.schema_id',
                 'collection_id' => 'c.id',
                 'collection_uid' => 'c.uid',
@@ -207,6 +221,43 @@ final class ElementRepository implements ElementRepositoryInterface
         return is_array($decoded) ? $decoded : [];
     }
 
+    private function mapStatus(mixed $value): ElementStatus
+    {
+        if (is_int($value) || (is_string($value) && is_numeric($value))) {
+            $status = ElementStatus::tryFrom((int) $value);
+            if ($status !== null) {
+                return $status;
+            }
+        }
+
+        if (is_string($value)) {
+            return match (strtolower($value)) {
+                'published' => ElementStatus::Published,
+                'archived' => ElementStatus::Archived,
+                default => ElementStatus::Draft,
+            };
+        }
+
+        return ElementStatus::Draft;
+    }
+
+    private function decodePublicationPlan(null|string $json): ?PublicationPlan
+    {
+        if ($json === null || $json === '') {
+            return null;
+        }
+
+        $decoded = json_decode((string) $json, true);
+        if (!is_array($decoded) || $decoded === []) {
+            return null;
+        }
+
+        try {
+            return PublicationPlan::fromArray($decoded);
+        } catch (Throwable) {
+            return null;
+        }
+    }
     private function mapCollectionStructure(mixed $value): CollectionStructure
     {
         if (is_string($value)) {
@@ -219,3 +270,6 @@ final class ElementRepository implements ElementRepositoryInterface
         return CollectionStructure::FLAT;
     }
 }
+
+
+

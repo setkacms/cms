@@ -19,25 +19,24 @@ declare(strict_types=1);
 
 namespace Setka\Cms\Contracts\Elements;
 
-interface ElementInterface
+enum ElementStatus: int
 {
-    public function getId(): ?int;
+    case Draft = 0;
+    case Published = 10;
+    case Archived = 20;
 
-    public function getUid(): string;
+    public function isDraft(): bool
+    {
+        return $this === self::Draft;
+    }
 
-    public function getCollectionId(): ?int;
+    public function isPublished(): bool
+    {
+        return $this === self::Published;
+    }
 
-    public function getSlug(): string;
-
-    public function getTitle(): string;
-
-    public function getLocale(): string;
-
-    public function getSchemaId(): ?int;
-
-    public function getStatus(): ElementStatus;
-
-    public function getPublicationPlan(): ?PublicationPlan;
-
-    public function getFieldValue(string $handle, ?int $version = null, ?string $locale = null): mixed;
+    public function isArchived(): bool
+    {
+        return $this === self::Archived;
+    }
 }

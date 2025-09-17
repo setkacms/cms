@@ -25,6 +25,7 @@ use Exception;
 use InvalidArgumentException;
 use JsonException;
 use Setka\Cms\Contracts\Fields\FieldValueRepositoryInterface;
+use Setka\Cms\Domain\Elements\ElementVersion;
 use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Fields\FieldType;
 use Setka\Cms\Domain\Workspaces\Workspace;
@@ -49,24 +50,28 @@ final class FieldValueRepository implements FieldValueRepositoryInterface
     {
     }
 
-    public function find(Workspace $workspace, int $elementId, Field $field, ?string $locale = null): mixed
+    public function find(Workspace $workspace, ElementVersion $version, Field $field, ?string $locale = null): mixed
     {
-        $workspaceId = $this->requireWorkspaceId($workspace);
-        $query = (new Query())
-            ->from('{{%field_value}}')
-            ->where([
-                'element_id' => $elementId,
-                'field_id' => $field->getId(),
-                'workspace_id' => $workspaceId,
-            ]);
-
-        if ($field->isLocalized()) {
-            $query->andWhere(['locale' => $locale]);
-        } else {
-            $query->andWhere(['locale' => null]);
+        if ($field->getId() === null) {
+            return null;
         }
 
-        $row = $query->one($this->db);
+        $versionId = $this->requireVersionId($version);
+        $elementId = $this->requireElementId($version);
+        $workspaceId = $this->requireWorkspaceId($workspace);
+        $effectiveLocale = $locale ?? $version->getLocale();
+
+        $row = (new Query())
+            ->from('{{%field_value}}')
+            ->where([
+                'version_id' => $versionId,
+                'field_id' => $fieldId,
+                'workspace_id' => $workspaceId,
+                'locale' => $effectiveLocale,
+                'element_id' => $elementId,
+            ])
+            ->one($this->db);
+
         if (!$row) {
             return null;
         }
@@ -74,192 +79,115 @@ final class FieldValueRepository implements FieldValueRepositoryInterface
         return $this->denormaliseValue($field, $this->decodeValue($row['value_json'] ?? 'null'));
     }
 
-    public function save(Workspace $workspace, int $elementId, Field $field, mixed $value, ?string $locale = null): void
+    public function save(Workspace $workspace, ElementVersion $version, Field $field, mixed $value, ?string $locale = null): void
     {
         if ($field->getId() === null) {
             throw new InvalidArgumentException('Field must be persisted before storing values.');
         }
 
-        $validationValue = $value;
-        if ($field->isLocalized() && $locale !== null) {
-            $validationValue = [$locale => $value];
-        }
-
-        $field->validate($validationValue);
         $workspaceId = $this->requireWorkspaceId($workspace);
+        $this->requireVersionId($version);
+        $this->requireElementId($version);
+        $effectiveLocale = $locale ?? $version->getLocale();
 
-        if ($field->isLocalized() && $locale === null && is_array($value)) {
-            foreach ($value as $localeKey => $localizedValue) {
-                if (!is_string($localeKey) || $localeKey === '') {
-                    throw new InvalidArgumentException('Localized values must be keyed by locale.');
-                }
-
-                $this->persistValue($workspaceId, $elementId, $field, $localizedValue, $localeKey);
-            }
-
-            return;
+        if ($effectiveLocale === '') {
+            throw new InvalidArgumentException('Locale must not be empty when persisting a field value.');
         }
 
-        $this->persistValue($workspaceId, $elementId, $field, $value, $locale);
+        if ($field->isLocalized() && $effectiveLocale !== $version->getLocale()) {
+            throw new InvalidArgumentException('Localized field values must use the element version locale.');
+        }
+
+        $validationValue = $field->isLocalized() ? [$effectiveLocale => $value] : $value;
+        $field->validate($validationValue);
+
+        $this->persistValue($workspaceId, $version, $field, $value, $effectiveLocale);
     }
 
-    public function delete(Workspace $workspace, int $elementId, Field $field, ?string $locale = null): void
+    public function delete(Workspace $workspace, ElementVersion $version, Field $field, ?string $locale = null): void
     {
         if ($field->getId() === null) {
             return;
         }
 
         $workspaceId = $this->requireWorkspaceId($workspace);
-
-        $condition = [
-            'element_id' => $elementId,
-            'field_id' => $field->getId(),
-            'workspace_id' => $workspaceId,
-        ];
-
-        if ($field->isLocalized()) {
-            $condition['locale'] = $locale;
-        } else {
-            $condition['locale'] = null;
-        }
+        $versionId = $this->requireVersionId($version);
+        $elementId = $this->requireElementId($version);
+        $effectiveLocale = $locale ?? $version->getLocale();
 
         $this->db->createCommand()
-            ->delete('{{%field_value}}', $condition)
+            ->delete('{{%field_value}}', [
+                'version_id' => $versionId,
+                'field_id' => $fieldId,
+                'workspace_id' => $workspaceId,
+                'element_id' => $elementId,
+                'locale' => $effectiveLocale,
+            ])
             ->execute();
     }
 
-    private function persistValue(int $workspaceId, int $elementId, Field $field, mixed $value, ?string $locale): void
+    private function persistValue(int $workspaceId, ElementVersion $version, Field $field, mixed $value, ?string $locale): void
     {
         if ($field->isLocalized() && ($locale === null || $locale === '')) {
             throw new InvalidArgumentException('Locale is required for localized fields.');
         }
 
+        $versionId = $this->requireVersionId($version);
+        $elementId = $this->requireElementId($version);
+        $effectiveLocale = $locale ?? $version->getLocale();
+
+        if ($effectiveLocale === '') {
+            throw new InvalidArgumentException('Locale must not be empty.');
+        }
+
+        if (!$field->isLocalized()) {
+            $effectiveLocale = $version->getLocale();
+        }
+
+        $fieldId = $field->getId();
+        if ($fieldId === null) {
+            throw new InvalidArgumentException('Field must be persisted before storing values.');
+        }
+
         $normalised = $this->normaliseForStorage($field, $value);
+        $timestamp = time();
         $payload = [
+            'version_id' => $versionId,
             'element_id' => $elementId,
             'field_id' => $field->getId(),
             'field_handle' => $field->getHandle(),
             'workspace_id' => $workspaceId,
-            'locale' => $field->isLocalized() ? $locale : null,
+            'locale' => $effectiveLocale,
             'value_json' => $this->encodeValue($normalised),
             'search_value' => $field->isSearchable() ? $this->buildSearchValue($field, $normalised) : null,
-            'updated_at' => time(),
+            'updated_at' => $timestamp,
         ];
 
         $existing = (new Query())
             ->select('id')
             ->from('{{%field_value}}')
             ->where([
-                'element_id' => $elementId,
+                'version_id' => $versionId,
                 'field_id' => $field->getId(),
                 'workspace_id' => $workspaceId,
-                'locale' => $payload['locale'],
+                'element_id' => $elementId,
+                'locale' => $effectiveLocale,
             ])
-            ->scalar($this->db);
+            ->one($this->db);
 
-        if ($existing === false || $existing === null) {
-            $payload['created_at'] = time();
+        if ($existing) {
             $this->db->createCommand()
-                ->insert('{{%field_value}}', $payload)
+                ->update('{{%field_value}}', $payload, ['id' => $existing['id']])
                 ->execute();
 
             return;
         }
 
+        $payload['created_at'] = $timestamp;
+
         $this->db->createCommand()
-            ->update('{{%field_value}}', $payload, ['id' => (int) $existing])
+            ->insert('{{%field_value}}', $payload)
             ->execute();
-    }
-
-    private function normaliseForStorage(Field $field, mixed $value): mixed
-    {
-        if ($field->isMultiValued()) {
-            if ($value instanceof Traversable) {
-                $value = iterator_to_array($value, false);
-            }
-
-            if (!is_array($value)) {
-                $value = [$value];
-            }
-
-            return array_map(fn(mixed $item) => $this->normaliseSingle($field, $item), array_values($value));
-        }
-
-        return $this->normaliseSingle($field, $value);
-    }
-
-    private function denormaliseValue(Field $field, mixed $value): mixed
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if ($field->isMultiValued()) {
-            if (!is_array($value)) {
-                return [];
-            }
-
-            return array_map(fn(mixed $item) => $this->denormaliseSingle($field, $item), $value);
-        }
-
-        return $this->denormaliseSingle($field, $value);
-    }
-
-    private function normaliseSingle(Field $field, mixed $value): mixed
-    {
-        return match ($field->getType()) {
-            FieldType::DATE, FieldType::DATETIME => $value instanceof DateTimeInterface ? $value->format(DateTimeInterface::ATOM) : (string) $value,
-            default => $value,
-        };
-    }
-
-    private function denormaliseSingle(Field $field, mixed $value): mixed
-    {
-        return match ($field->getType()) {
-            FieldType::DATE, FieldType::DATETIME => is_string($value) && $value !== '' ? $this->hydrateDate($value) : null,
-            default => $value,
-        };
-    }
-
-    private function buildSearchValue(Field $field, mixed $value): ?string
-    {
-        if ($value === null) {
-            return null;
-        }
-
-        if ($field->isMultiValued()) {
-            if (!is_array($value)) {
-                return null;
-            }
-
-            $flattened = array_map(
-                static fn(mixed $item): string => is_scalar($item) ? (string) $item : '',
-                $value
-            );
-
-            $parts = array_filter($flattened, static fn(string $part): bool => $part !== '');
-
-            return $parts === [] ? null : trim(implode(' ', $parts));
-        }
-
-        if (is_scalar($value)) {
-            return (string) $value;
-        }
-
-        if (is_array($value)) {
-            $parts = [];
-            foreach ($value as $entry) {
-                if (is_scalar($entry)) {
-                    $parts[] = (string) $entry;
-                } elseif (is_array($entry) && isset($entry['text']) && is_scalar($entry['text'])) {
-                    $parts[] = (string) $entry['text'];
-                }
-            }
-
-            return $parts === [] ? null : trim(implode(' ', $parts));
-        }
-
-        return null;
     }
 
     private function encodeValue(mixed $value): string
@@ -293,6 +221,26 @@ final class FieldValueRepository implements FieldValueRepositoryInterface
         }
     }
 
+    private function requireVersionId(ElementVersion $version): int
+    {
+        $versionId = $version->getId();
+        if ($versionId === null) {
+            throw new InvalidArgumentException('Element version must have an identifier to persist field values.');
+        }
+
+        return $versionId;
+    }
+
+    private function requireElementId(ElementVersion $version): int
+    {
+        $elementId = $version->getElement()->getId();
+        if ($elementId === null) {
+            throw new InvalidArgumentException('Element must have an identifier to persist field values.');
+        }
+
+        return $elementId;
+    }
+
     private function requireWorkspaceId(Workspace $workspace): int
     {
         $workspaceId = $workspace->getId();
@@ -303,4 +251,7 @@ final class FieldValueRepository implements FieldValueRepositoryInterface
         return $workspaceId;
     }
 }
+
+
+
 

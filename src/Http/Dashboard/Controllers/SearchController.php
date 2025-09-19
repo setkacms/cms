@@ -17,4 +17,9 @@ final class SearchController extends Controller
     {
         return $this->render('index');
     }
+
+    public function actionRebuild(): string
+    {
+        return $this->render('rebuild');
+    }
 }

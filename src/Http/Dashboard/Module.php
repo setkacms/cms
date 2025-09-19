@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 /*
  * This file is part of Setka CMS.
  *
@@ -44,6 +44,7 @@ class Module extends BaseModule
                 'index' => ['class' => DashboardControllers\IndexController::class],
                 'collections' => ['class' => DashboardControllers\CollectionsController::class],
                 'elements' => ['class' => DashboardControllers\ElementsController::class],
+                'entries' => ['class' => DashboardControllers\EntriesController::class],
                 'media' => ['class' => DashboardControllers\MediaController::class],
                 'assets' => ['class' => DashboardControllers\MediaController::class],
                 'schemas' => ['class' => DashboardControllers\SchemasController::class],
@@ -64,6 +65,12 @@ class Module extends BaseModule
             ],
             $this->controllerMap
         );
+        if (Yii::$app instanceof \yii\web\Application) {
+            Yii::$app->urlManager->addRules([
+                'dashboard/collections/<handle:[A-Za-z0-9\-_]+>/entries/<id:[^/]+>/edit' => 'dashboard/entries/edit',
+            ], false);
+        }
+
 
         $container = Yii::$container;
         $container->set(MetricsRepositoryInterface::class, InMemoryMetricsRepository::class);
@@ -72,3 +79,5 @@ class Module extends BaseModule
         $container->set(QuickActionRepositoryInterface::class, InMemoryQuickActionRepository::class);
     }
 }
+
+

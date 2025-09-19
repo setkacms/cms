@@ -1,11 +1,11 @@
-<?php
+<?php declare(strict_types=1);
+
 /*
  * This file is part of Setka CMS.
  *
  * @package   Setka CMS
  */
 
-declare(strict_types=1);
 
 namespace Setka\Cms\Http\Dashboard\Controllers;
 
@@ -18,9 +18,13 @@ use yii\web\NotFoundHttpException;
 use yii\web\Response;
 
 use Setka\Cms\Infrastructure\Dashboard\Collections\InMemoryCollectionEntriesRepository;
+use Setka\Cms\Infrastructure\Dashboard\Collections\InMemoryCollectionsRepository;
+use Setka\Cms\Http\Dashboard\Controllers\Traits\CollectionPermissionsTrait;
 
 final class CollectionsController extends Controller
 {
+    use CollectionPermissionsTrait;
+
     private const SORTABLE_COLUMNS = [
         1 => 'name',
         2 => 'handle',
@@ -31,9 +35,9 @@ final class CollectionsController extends Controller
     ];
 
     private const STATUS_LABELS = [
-        'published' => 'Опубликовано',
-        'draft' => 'Черновик',
-        'archived' => 'Архив',
+        'published' => 'РћРїСѓР±Р»РёРєРѕРІР°РЅРѕ',
+        'draft' => 'Р§РµСЂРЅРѕРІРёРє',
+        'archived' => 'РђСЂС…РёРІ',
     ];
 
     private const STATUS_BADGES = [
@@ -43,21 +47,24 @@ final class CollectionsController extends Controller
     ];
 
     private const STRUCTURE_LABELS = [
-        'flat' => 'Плоская',
-        'tree' => 'Древовидная',
-        'calendar' => 'Календарь',
-        'sequence' => 'Последовательность',
+        'flat' => 'РџР»РѕСЃРєР°СЏ',
+        'tree' => 'Р”СЂРµРІРѕРІРёРґРЅР°СЏ',
+        'calendar' => 'РљР°Р»РµРЅРґР°СЂСЊ',
+        'sequence' => 'РџРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚СЊ',
     ];
 
     private InMemoryCollectionEntriesRepository $collectionEntriesRepository;
+    private InMemoryCollectionsRepository $collectionsRepository;
 
     public function __construct(
         $id,
         $module,
         ?InMemoryCollectionEntriesRepository $collectionEntriesRepository = null,
+        ?InMemoryCollectionsRepository $collectionsRepository = null,
         array $config = []
     ) {
         $this->collectionEntriesRepository = $collectionEntriesRepository ?? new InMemoryCollectionEntriesRepository();
+        $this->collectionsRepository = $collectionsRepository ?? new InMemoryCollectionsRepository();
         parent::__construct($id, $module, $config);
     }
 
@@ -84,7 +91,7 @@ final class CollectionsController extends Controller
 
         $collection = $this->findCollectionByHandle($handle);
         if ($collection === null) {
-            throw new NotFoundHttpException('Коллекция не найдена.');
+            throw new NotFoundHttpException('РљРѕР»Р»РµРєС†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°.');
         }
 
         $this->assertCanViewEntries($collection);
@@ -122,7 +129,7 @@ final class CollectionsController extends Controller
     {
         $collection = $this->findCollectionByHandle($handle);
         if ($collection === null) {
-            throw new NotFoundHttpException('Коллекция не найдена.');
+            throw new NotFoundHttpException('РљРѕР»Р»РµРєС†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°.');
         }
 
         $this->assertCanViewEntries($collection);
@@ -162,7 +169,7 @@ final class CollectionsController extends Controller
         }
         $searchParam = trim($searchParam);
 
-        $dataset = $this->getCollectionsDataset();
+        $dataset = $this->collectionsRepository->all();
         $recordsTotal = count($dataset);
 
         $filtered = array_values(array_filter(
@@ -247,360 +254,10 @@ final class CollectionsController extends Controller
     /**
      * @return array<int, array<string, scalar>>
      */
-    private function getCollectionsDataset(): array
-    {
-        return [
-            [
-                'id' => 1,
-                'name' => 'Статьи',
-                'handle' => 'articles',
-                'structure' => 'flat',
-                'entries' => 128,
-                'status' => 'published',
-                'updated_at' => '2025-03-05 10:24:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                    ['code' => 'en-US', 'label' => 'English'],
-                ],
-                'taxonomies' => [
-                    [
-                        'handle' => 'topics',
-                        'label' => 'Темы',
-                        'terms' => [
-                            ['slug' => 'analytics', 'name' => 'Аналитика'],
-                            ['slug' => 'marketing', 'name' => 'Маркетинг'],
-                            ['slug' => 'workflow', 'name' => 'Процессы'],
-                            ['slug' => 'culture', 'name' => 'Культура'],
-                        ],
-                    ],
-                    [
-                        'handle' => 'channels',
-                        'label' => 'Каналы',
-                        'terms' => [
-                            ['slug' => 'site', 'name' => 'Сайт'],
-                            ['slug' => 'magazine', 'name' => 'Журнал'],
-                            ['slug' => 'newsletter', 'name' => 'Рассылка'],
-                        ],
-                    ],
-                ],
-                'fields' => [
-                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
-                    ['handle' => 'reading_time', 'label' => 'Время чтения (мин)', 'type' => 'number'],
-                    ['handle' => 'promo', 'label' => 'Промо-подборка', 'type' => 'boolean'],
-                ],
-                'entry_saved_views' => [
-                    [
-                        'id' => 'recent-publications',
-                        'name' => 'Свежие публикации',
-                        'filters' => [
-                            'statuses' => ['published'],
-                            'updated_from' => '2025-03-01',
-                        ],
-                    ],
-                    [
-                        'id' => 'drafts-ru',
-                        'name' => 'Черновики (RU)',
-                        'filters' => [
-                            'statuses' => ['draft'],
-                            'locales' => ['ru-RU'],
-                        ],
-                    ],
-                ],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 2,
-                'name' => 'Новости',
-                'handle' => 'news',
-                'structure' => 'sequence',
-                'entries' => 45,
-                'status' => 'published',
-                'updated_at' => '2025-03-06 08:05:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [
-                    [
-                        'handle' => 'regions',
-                        'label' => 'Регионы',
-                        'terms' => [
-                            ['slug' => 'moscow', 'name' => 'Москва'],
-                            ['slug' => 'spb', 'name' => 'Санкт-Петербург'],
-                            ['slug' => 'global', 'name' => 'Мир'],
-                        ],
-                    ],
-                ],
-                'fields' => [
-                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => false,
-                    'bulkActions' => false,
-                ],
-            ],
-            [
-                'id' => 3,
-                'name' => 'Интервью',
-                'handle' => 'interviews',
-                'structure' => 'tree',
-                'entries' => 12,
-                'status' => 'draft',
-                'updated_at' => '2025-02-27 14:40:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                    ['code' => 'en-US', 'label' => 'English'],
-                ],
-                'taxonomies' => [
-                    [
-                        'handle' => 'topics',
-                        'label' => 'Темы',
-                        'terms' => [
-                            ['slug' => 'leadership', 'name' => 'Лидерство'],
-                            ['slug' => 'engineering', 'name' => 'Инженерия'],
-                            ['slug' => 'product', 'name' => 'Продукт'],
-                        ],
-                    ],
-                    [
-                        'handle' => 'channels',
-                        'label' => 'Каналы',
-                        'terms' => [
-                            ['slug' => 'site', 'name' => 'Сайт'],
-                            ['slug' => 'video', 'name' => 'Видео'],
-                        ],
-                    ],
-                ],
-                'fields' => [
-                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
-                    ['handle' => 'reading_time', 'label' => 'Время чтения (мин)', 'type' => 'number'],
-                    ['handle' => 'promo', 'label' => 'Тизер', 'type' => 'boolean'],
-                ],
-                'entry_saved_views' => [
-                    [
-                        'id' => 'published-tree',
-                        'name' => 'Опубликованные ветки',
-                        'filters' => [
-                            'statuses' => ['published'],
-                        ],
-                    ],
-                ],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 4,
-                'name' => 'Документация',
-                'handle' => 'docs',
-                'structure' => 'flat',
-                'entries' => 210,
-                'status' => 'archived',
-                'updated_at' => '2024-12-18 09:30:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                    ['code' => 'en-US', 'label' => 'English'],
-                ],
-                'taxonomies' => [],
-                'fields' => [
-                    ['handle' => 'editor', 'label' => 'Редактор', 'type' => 'text'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 5,
-                'name' => 'Мероприятия',
-                'handle' => 'events',
-                'structure' => 'calendar',
-                'entries' => 32,
-                'status' => 'published',
-                'updated_at' => '2025-03-02 16:55:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [
-                    [
-                        'handle' => 'type',
-                        'label' => 'Тип',
-                        'terms' => [
-                            ['slug' => 'webinar', 'name' => 'Вебинар'],
-                            ['slug' => 'offline', 'name' => 'Оффлайн'],
-                        ],
-                    ],
-                ],
-                'fields' => [
-                    ['handle' => 'location', 'label' => 'Локация', 'type' => 'text'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 6,
-                'name' => 'Проекты',
-                'handle' => 'projects',
-                'structure' => 'tree',
-                'entries' => 8,
-                'status' => 'draft',
-                'updated_at' => '2025-01-21 11:15:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [],
-                'fields' => [
-                    ['handle' => 'owner', 'label' => 'Владелец', 'type' => 'text'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => false,
-                ],
-            ],
-            [
-                'id' => 7,
-                'name' => 'Отзывы',
-                'handle' => 'testimonials',
-                'structure' => 'flat',
-                'entries' => 64,
-                'status' => 'published',
-                'updated_at' => '2025-02-14 18:20:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [],
-                'fields' => [
-                    ['handle' => 'rating', 'label' => 'Оценка', 'type' => 'number'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 8,
-                'name' => 'Партнеры',
-                'handle' => 'partners',
-                'structure' => 'flat',
-                'entries' => 5,
-                'status' => 'archived',
-                'updated_at' => '2024-11-03 12:00:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [],
-                'fields' => [],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => false,
-                    'bulkActions' => false,
-                ],
-            ],
-            [
-                'id' => 9,
-                'name' => 'Подкаст',
-                'handle' => 'podcast',
-                'structure' => 'sequence',
-                'entries' => 27,
-                'status' => 'published',
-                'updated_at' => '2025-03-07 07:45:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                    ['code' => 'en-US', 'label' => 'English'],
-                ],
-                'taxonomies' => [
-                    [
-                        'handle' => 'hosts',
-                        'label' => 'Ведущие',
-                        'terms' => [
-                            ['slug' => 'anna', 'name' => 'Анна'],
-                            ['slug' => 'sergey', 'name' => 'Сергей'],
-                        ],
-                    ],
-                ],
-                'fields' => [
-                    ['handle' => 'duration', 'label' => 'Длительность (мин)', 'type' => 'number'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-            [
-                'id' => 10,
-                'name' => 'Пресс-релизы',
-                'handle' => 'press',
-                'structure' => 'flat',
-                'entries' => 14,
-                'status' => 'draft',
-                'updated_at' => '2025-02-25 13:05:00',
-                'locales' => [
-                    ['code' => 'ru-RU', 'label' => 'Русский'],
-                ],
-                'taxonomies' => [],
-                'fields' => [
-                    ['handle' => 'contact', 'label' => 'Контакт', 'type' => 'text'],
-                ],
-                'entry_saved_views' => [],
-                'permissions' => [
-                    'viewEntries' => true,
-                    'createEntries' => true,
-                    'bulkActions' => true,
-                ],
-            ],
-        ];
-    }
-
     private function findCollectionByHandle(string $handle): ?array
     {
-        foreach ($this->getCollectionsDataset() as $collection) {
-            if (($collection['handle'] ?? null) === $handle) {
-                return $collection;
-            }
-        }
-
-        return null;
+        return $this->collectionsRepository->findByHandle($handle);
     }
-
-    /**
-     * @param array<string, mixed> $collection
-     */
-    private function assertCanViewEntries(array $collection): void
-    {
-        $user = Yii::$app->user;
-        if ($user === null || $user->isGuest) {
-            throw new ForbiddenHttpException('Недостаточно прав для просмотра записей коллекции.');
-        }
-
-        if (!$user->can('collections.viewEntries')) {
-            throw new ForbiddenHttpException('Недостаточно прав для просмотра записей коллекции.');
-        }
-
-        $permissions = $collection['permissions']['viewEntries'] ?? true;
-        if ($permissions === false) {
-            throw new ForbiddenHttpException('Доступ к записям коллекции ограничен.');
-        }
-    }
-
     /**
      * @param array<string, scalar> $item
      *
@@ -667,3 +324,11 @@ final class CollectionsController extends Controller
         return $date->format('d.m.Y H:i');
     }
 }
+
+
+
+
+
+
+
+

@@ -58,21 +58,21 @@ $menuItems = [
     ],
     [
         'label' => '<i class="fa fa-picture-o"></i> <span>Медиа</span>' . $caret,
-        'url' => Url::to(['/dashboard/assets/library']),
+        'url' => Url::to(['/dashboard/media/library']),
         'options' => ['class' => 'treeview'],
         'items' => [
             [
                 'label' => '<i class="fa fa-image"></i> Библиотека',
-                'url' => Url::to(['/dashboard/assets/library']),
-                'active' => $equalsRoute('dashboard/assets/library'),
+                'url' => Url::to(['/dashboard/media/library']),
+                'active' => $equalsRoute('dashboard/media/library'),
             ],
             [
                 'label' => '<i class="fa fa-upload"></i> Загрузки',
-                'url' => Url::to(['/dashboard/assets/upload']),
-                'active' => $equalsRoute('dashboard/assets/upload'),
+                'url' => Url::to(['/dashboard/media/upload']),
+                'active' => $equalsRoute('dashboard/media/upload'),
             ],
         ],
-        'active' => $inSection('dashboard/assets'),
+        'active' => $inSection('dashboard/media'),
     ],
     '<li class="header">Структура</li>',
     [
@@ -100,21 +100,21 @@ $menuItems = [
     ],
     [
         'label' => '<i class="fa fa-sitemap"></i> <span>Таксономии</span>' . $caret,
-        'url' => Url::to(['/dashboard/taxonomy/index']),
+        'url' => Url::to(['/dashboard/taxonomies/index']),
         'options' => ['class' => 'treeview'],
         'items' => [
             [
                 'label' => '<i class="fa fa-bookmark"></i> Таксономии',
-                'url' => Url::to(['/dashboard/taxonomy/index']),
-                'active' => $equalsRoute('dashboard/taxonomy/index'),
+                'url' => Url::to(['/dashboard/taxonomies/index']),
+                'active' => $equalsRoute('dashboard/taxonomies/index'),
             ],
             [
                 'label' => '<i class="fa fa-tags"></i> Термины',
-                'url' => Url::to(['/dashboard/taxonomy/terms']),
-                'active' => $equalsRoute('dashboard/taxonomy/terms'),
+                'url' => Url::to(['/dashboard/taxonomies/terms']),
+                'active' => $equalsRoute('dashboard/taxonomies/terms'),
             ],
         ],
-        'active' => $inSection('dashboard/taxonomy'),
+        'active' => $inSection('dashboard/taxonomies'),
     ],
     [
         'label' => '<i class="fa fa-link"></i> <span>Связи</span>',
@@ -142,8 +142,8 @@ $menuItems = [
     ],
     [
         'label' => '<i class="fa fa-id-badge"></i> <span>Роли и доступ</span>',
-        'url' => Url::to(['/dashboard/users/roles']),
-        'active' => $inSection('dashboard/users/roles'),
+        'url' => Url::to(['/dashboard/roles/index']),
+        'active' => $inSection('dashboard/roles'),
     ],
     [
         'label' => '<i class="fa fa-building"></i> <span>Рабочие пространства</span>' . $caret,
@@ -210,6 +210,17 @@ $menuItems = [
         ],
         'active' => $inSection('dashboard/integrations'),
     ],
+    '<li class="header">Процессы</li>',
+    [
+        'label' => '<i class="fa fa-language"></i> <span>Локализация</span>',
+        'url' => Url::to(['/dashboard/localization/index']),
+        'active' => $inSection('dashboard/localization'),
+    ],
+    [
+        'label' => '<i class="fa fa-random"></i> <span>Воркфлоу</span>',
+        'url' => Url::to(['/dashboard/workflow/index']),
+        'active' => $inSection('dashboard/workflow'),
+    ],
     '<li class="header">Система</li>',
     [
         'label' => '<i class="fa fa-cogs"></i> <span>Настройки</span>' . $caret,
@@ -269,7 +280,7 @@ $menuItems = [
         </div>
 
         <!-- search form -->
-        <form action="#" method="get" class="sidebar-form">
+        <form action="<?= Url::to(['/dashboard/search/index']) ?>" method="get" class="sidebar-form">
             <div class="input-group">
                 <input type="text" name="q" class="form-control" placeholder="Search..."/>
               <span class="input-group-btn">

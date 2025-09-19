@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Setka\Cms\Tests\Unit\Domain\Elements;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use Setka\Cms\Contracts\Elements\ElementStatus;
 use Setka\Cms\Contracts\Elements\PublicationPlan;
@@ -84,14 +85,82 @@ final class ElementTest extends TestCase
         self::assertSame('de-DE', $germanDraft->getLocale());
     }
 
-    private function createElement(): Element
+    public function testFlatCollectionRejectsParentAssignment(): void
+    {
+        $element = $this->createElement();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('does not support parent assignment');
+
+        $element->setParentId(10);
+    }
+
+    public function testTreeCollectionAllowsParentAndPosition(): void
+    {
+        $parent = $this->createElement(CollectionStructure::TREE, id: 1);
+        $child = $this->createElement(CollectionStructure::TREE, id: 2);
+
+        $child->setParent($parent, 3);
+        $child->setTreeMetrics(2, 5, 1);
+
+        self::assertSame(1, $child->getParentId());
+        self::assertSame($parent, $child->getParent());
+        self::assertSame(3, $child->getPosition());
+        self::assertSame(2, $child->getLeftBoundary());
+        self::assertSame(5, $child->getRightBoundary());
+        self::assertSame(1, $child->getDepth());
+    }
+
+    public function testSetParentRejectsDifferentCollection(): void
+    {
+        $workspace = new Workspace('workspace', 'Workspace', ['en-US'], [], 1, 'workspace');
+        $collectionA = new Collection($workspace, 'a', 'A', CollectionStructure::TREE, id: 1, uid: 'a');
+        $collectionB = new Collection($workspace, 'b', 'B', CollectionStructure::TREE, id: 2, uid: 'b');
+
+        $parent = new Element($collectionA, 'en-US', 'parent', 'Parent', id: 10);
+        $child = new Element($collectionB, 'en-US', 'child', 'Child', id: 11);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Parent element must belong to the same collection');
+
+        $child->setParent($parent);
+    }
+
+    public function testSetParentRejectsDifferentLocale(): void
+    {
+        $parent = $this->createElement(CollectionStructure::TREE, id: 1);
+        $germanChild = new Element(
+            collection: $parent->getCollection(),
+            locale: 'de-DE',
+            slug: 'de-child',
+            title: 'DE Child',
+            id: 2
+        );
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Parent element must have the same locale');
+
+        $germanChild->setParent($parent);
+    }
+
+    public function testSetTreeMetricsValidatesBoundaries(): void
+    {
+        $element = $this->createElement(CollectionStructure::TREE);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Left boundary must be less than right boundary');
+
+        $element->setTreeMetrics(5, 3, 0);
+    }
+
+    private function createElement(CollectionStructure $structure = CollectionStructure::FLAT, ?int $id = null): Element
     {
         $workspace = new Workspace('workspace', 'Workspace', ['en-US', 'de-DE'], [], 1, 'workspace');
         $collection = new Collection(
             workspace: $workspace,
             handle: 'articles',
             name: 'Articles',
-            structure: CollectionStructure::FLAT,
+            structure: $structure,
             urlRules: [],
             publicationRules: [],
             id: 10,
@@ -102,7 +171,8 @@ final class ElementTest extends TestCase
             collection: $collection,
             locale: 'en-US',
             slug: 'welcome-post',
-            title: 'Welcome Post'
+            title: 'Welcome Post',
+            id: $id
         );
     }
 

@@ -31,6 +31,18 @@ interface ElementInterface
 
     public function getTitle(): string;
 
+    public function getParentId(): ?int;
+
+    public function getPosition(): int;
+
+    public function getLeftBoundary(): ?int;
+
+    public function getRightBoundary(): ?int;
+
+    public function getDepth(): ?int;
+
+    public function getParent(): ?ElementInterface;
+
     public function getLocale(): string;
 
     public function getSchemaId(): ?int;

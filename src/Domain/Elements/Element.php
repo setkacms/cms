@@ -29,6 +29,7 @@ use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Schemas\Schema;
 use Setka\Cms\Domain\Taxonomy\Taxonomy;
 use Setka\Cms\Domain\Taxonomy\Term;
+use function sprintf;
 
 final class Element implements ElementInterface
 {
@@ -49,6 +50,18 @@ final class Element implements ElementInterface
     private ?Schema $schema = null;
 
     private ElementStatus $status;
+
+    private ?int $parentId;
+
+    private int $position;
+
+    private ?self $parent = null;
+
+    private ?int $leftBoundary;
+
+    private ?int $rightBoundary;
+
+    private ?int $depth;
 
     /** @var array<string, array<int, ElementVersion>> */
     private array $versions = [];
@@ -76,7 +89,12 @@ final class Element implements ElementInterface
         ?string $uid = null,
         ?int $schemaId = null,
         ?PublicationPlan $publicationPlan = null,
-        ElementStatus $status = ElementStatus::Draft
+        ElementStatus $status = ElementStatus::Draft,
+        ?int $parentId = null,
+        int $position = 0,
+        ?int $leftBoundary = null,
+        ?int $rightBoundary = null,
+        ?int $depth = null
     ) {
         $this->collection = $collection;
         $this->locale = $this->assertLocale($locale);
@@ -87,6 +105,8 @@ final class Element implements ElementInterface
         $this->schemaId = $this->filterSchemaId($schemaId);
         $this->publicationPlan = $publicationPlan;
         $this->status = $status;
+        [$this->parentId, $this->position, $this->leftBoundary, $this->rightBoundary, $this->depth] =
+            $this->initialiseTreeState($parentId, $position, $leftBoundary, $rightBoundary, $depth);
         $this->createdAt = new DateTimeImmutable();
         $this->updatedAt = new DateTimeImmutable();
     }
@@ -161,6 +181,112 @@ final class Element implements ElementInterface
         }
 
         $this->title = $normalised;
+        $this->touch();
+    }
+
+    public function getParentId(): ?int
+    {
+        return $this->parentId;
+    }
+
+    public function setParentId(?int $parentId): void
+    {
+        $this->assertTreeStructure('parent assignment', $parentId !== null);
+        $parentId = $this->filterParentId($parentId);
+
+        if ($this->id !== null && $parentId === $this->id) {
+            throw new InvalidArgumentException('Element cannot be its own parent.');
+        }
+
+        if ($this->parentId === $parentId) {
+            return;
+        }
+
+        $this->parentId = $parentId;
+        $this->parent = null;
+        $this->touch();
+    }
+
+    public function setParent(?self $parent, ?int $position = null): void
+    {
+        $parentId = null;
+        if ($parent !== null) {
+            if ($parent === $this) {
+                throw new InvalidArgumentException('Element cannot be its own parent.');
+            }
+
+            if ($parent->getCollection() !== $this->collection) {
+                throw new InvalidArgumentException('Parent element must belong to the same collection.');
+            }
+
+            if ($parent->getLocale() !== $this->locale) {
+                throw new InvalidArgumentException('Parent element must have the same locale.');
+            }
+
+            $parentId = $parent->getId();
+            if ($parentId === null) {
+                throw new InvalidArgumentException('Parent element must be persisted.');
+            }
+        }
+
+        $this->setParentId($parentId);
+
+        if ($position !== null) {
+            $this->setPosition($position);
+        }
+
+        $this->parent = $parent;
+    }
+
+    public function getParent(): ?self
+    {
+        return $this->parent;
+    }
+
+    public function getPosition(): int
+    {
+        return $this->position;
+    }
+
+    public function setPosition(int $position): void
+    {
+        $this->assertTreeStructure('position update');
+        $position = $this->assertSiblingPosition($position);
+        if ($this->position === $position) {
+            return;
+        }
+
+        $this->position = $position;
+        $this->touch();
+    }
+
+    public function getLeftBoundary(): ?int
+    {
+        return $this->leftBoundary;
+    }
+
+    public function getRightBoundary(): ?int
+    {
+        return $this->rightBoundary;
+    }
+
+    public function getDepth(): ?int
+    {
+        return $this->depth;
+    }
+
+    public function setTreeMetrics(?int $leftBoundary, ?int $rightBoundary, ?int $depth): void
+    {
+        $this->assertTreeStructure('tree metrics update', $leftBoundary !== null || $rightBoundary !== null || $depth !== null);
+        [$leftBoundary, $rightBoundary, $depth] = $this->normaliseTreeMetrics($leftBoundary, $rightBoundary, $depth);
+
+        if ($this->leftBoundary === $leftBoundary && $this->rightBoundary === $rightBoundary && $this->depth === $depth) {
+            return;
+        }
+
+        $this->leftBoundary = $leftBoundary;
+        $this->rightBoundary = $rightBoundary;
+        $this->depth = $depth;
         $this->touch();
     }
 
@@ -646,6 +772,88 @@ final class Element implements ElementInterface
     private function touch(): void
     {
         $this->updatedAt = new DateTimeImmutable();
+    }
+
+    /**
+     * @return array{0:?int,1:int,2:?int,3:?int,4:?int}
+     */
+    private function initialiseTreeState(
+        ?int $parentId,
+        int $position,
+        ?int $leftBoundary,
+        ?int $rightBoundary,
+        ?int $depth
+    ): array {
+        if (!$this->collection->isTree()) {
+            return [null, 0, null, null, null];
+        }
+
+        $parentId = $this->filterParentId($parentId);
+        $position = $this->assertSiblingPosition($position);
+        [$leftBoundary, $rightBoundary, $depth] = $this->normaliseTreeMetrics($leftBoundary, $rightBoundary, $depth);
+
+        return [$parentId, $position, $leftBoundary, $rightBoundary, $depth];
+    }
+
+    private function assertTreeStructure(string $operation, bool $requireTree = true): void
+    {
+        if ($this->collection->isTree()) {
+            return;
+        }
+
+        if ($requireTree) {
+            throw new InvalidArgumentException(sprintf(
+                'Collection "%s" does not support %s because it is configured as flat.',
+                $this->collection->getHandle(),
+                $operation
+            ));
+        }
+    }
+
+    private function filterParentId(?int $parentId): ?int
+    {
+        if ($parentId === null) {
+            return null;
+        }
+
+        if ($parentId <= 0) {
+            throw new InvalidArgumentException('Parent identifier must be positive.');
+        }
+
+        return $parentId;
+    }
+
+    private function assertSiblingPosition(int $position): int
+    {
+        if ($position < 0) {
+            throw new InvalidArgumentException('Element position must be non-negative.');
+        }
+
+        return $position;
+    }
+
+    /**
+     * @return array{0:?int,1:?int,2:?int}
+     */
+    private function normaliseTreeMetrics(?int $leftBoundary, ?int $rightBoundary, ?int $depth): array
+    {
+        if ($leftBoundary !== null && $leftBoundary <= 0) {
+            throw new InvalidArgumentException('Left boundary must be greater than zero.');
+        }
+
+        if ($rightBoundary !== null && $rightBoundary <= 0) {
+            throw new InvalidArgumentException('Right boundary must be greater than zero.');
+        }
+
+        if ($leftBoundary !== null && $rightBoundary !== null && $leftBoundary >= $rightBoundary) {
+            throw new InvalidArgumentException('Left boundary must be less than right boundary.');
+        }
+
+        if ($depth !== null && $depth < 0) {
+            throw new InvalidArgumentException('Depth must be non-negative.');
+        }
+
+        return [$leftBoundary, $rightBoundary, $depth];
     }
 
     private function filterSchemaId(?int $schemaId): ?int

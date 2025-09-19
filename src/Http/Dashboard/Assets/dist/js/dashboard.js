@@ -17,6 +17,21 @@
         collectionEntriesCurrentNodeId: '',
         matrixInstances: [],
         matrixBlockUid: 0,
+        relationsDataset: null,
+        relationOptionsCache: {},
+        relationSelectionKey: 'dashboard.relations.selection',
+        relationSavedSelection: null,
+        mediaAssetsDataset: null,
+        mediaAssetsIndex: {},
+        mediaLibraryFilters: null,
+        mediaLibrarySelection: [],
+        mediaLibraryViewMode: 'grid',
+        taxonomyDataset: null,
+        taxonomyCurrentHandle: '',
+        taxonomySortableInstances: [],
+        taxonomyCurrentIndex: {},
+        taxonomySearchQuery: '',
+        taxonomyStorageKey: 'dashboard.taxonomy.lastHandle',
 
         init: function () {
             this.initSelect2();
@@ -34,6 +49,9 @@
             this.initCollectionsSavedViews();
             this.bindCollectionsActionBar();
             this.initCollectionEntriesModule();
+            this.initRelationsModule();
+            this.initMediaLibraryModule();
+            this.initTaxonomyTermsModule();
         },
 
         initSelect2: function () {
@@ -43,6 +61,9 @@
 
             $('.select2').each(function () {
                 var $element = $(this);
+                if ($element.data('skipGlobalInit')) {
+                    return;
+                }
                 if ($element.data('select2')) {
                     return;
                 }
@@ -2056,6 +2077,1531 @@
                 var visible = $(this).prop('checked');
                 self.collectionEntriesTable.column(columnIndex).visible(visible);
             });
+        },
+
+        initRelationsModule: function () {
+            if (!$.fn.select2) {
+                return;
+            }
+
+            var $modal = $('#relation-modal');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $source = $modal.find('[data-role="relation-source"]');
+            var $target = $modal.find('[data-role="relation-target"]');
+            if (!$source.length || !$target.length) {
+                return;
+            }
+
+            this.loadRelationSelection();
+
+            var self = this;
+            var configureSelect = function ($element, type) {
+                if ($element.data('select2')) {
+                    $element.select2('destroy');
+                }
+
+                var saved = self.getRelationSavedSelection(type);
+                if (saved && saved.id) {
+                    var option = new Option(saved.text || saved.id, saved.id, true, true);
+                    $element.append(option);
+                    self.relationOptionsCache[saved.id] = saved;
+                }
+
+                $element.select2({
+                    width: '100%',
+                    allowClear: true,
+                    dropdownParent: $modal,
+                    placeholder: $element.data('placeholder') || '',
+                    ajax: {
+                        transport: function (params, success, failure) {
+                            params = params || {};
+                            var query = '';
+                            var page = 1;
+                            if (params.data) {
+                                query = params.data.q || '';
+                                page = parseInt(params.data.page || 1, 10);
+                                if (isNaN(page) || page < 1) {
+                                    page = 1;
+                                }
+                            }
+
+                            self.searchRelationElements(query, page)
+                                .done(function (results) {
+                                    success(results);
+                                })
+                                .fail(failure);
+                        },
+                        delay: 200,
+                        processResults: function (data) {
+                            return data;
+                        }
+                    },
+                    templateResult: function (item) {
+                        if (item.loading) {
+                            return item.text;
+                        }
+
+                        var $result = $('<div class="relation-select-option"></div>');
+                        var $title = $('<div class="relation-select-option__title"></div>').text(item.text || item.id || '');
+                        $result.append($title);
+
+                        var metaParts = [];
+                        if (item.collectionName) {
+                            metaParts.push(item.collectionName);
+                        }
+                        if (item.slug) {
+                            metaParts.push('<code>' + $('<div>').text(item.slug).html() + '</code>');
+                        }
+                        if (item.status) {
+                            metaParts.push(item.status);
+                        }
+
+                        if (metaParts.length) {
+                            $result.append($('<div class="relation-select-option__meta"></div>').html(metaParts.join(' • ')));
+                        }
+
+                        return $result;
+                    },
+                    templateSelection: function (item) {
+                        return item.text || item.id;
+                    },
+                    escapeMarkup: function (markup) {
+                        return markup;
+                    }
+                });
+
+                $element.on('change', function () {
+                    self.saveRelationSelection(type, $element.select2('data'));
+                });
+
+                $element.on('select2:select', function (event) {
+                    var data = event.params && event.params.data ? event.params.data : null;
+                    if (data && data.id) {
+                        self.relationOptionsCache[data.id] = $.extend({}, data);
+                    }
+                });
+
+                $element.on('select2:clear', function () {
+                    self.saveRelationSelection(type, []);
+                });
+
+                $element.trigger('change');
+            };
+
+            configureSelect($source, 'source');
+            configureSelect($target, 'target');
+        },
+
+        getRelationsDataset: function () {
+            var deferred = $.Deferred();
+            if (this.relationsDataset) {
+                deferred.resolve(this.relationsDataset);
+                return deferred.promise();
+            }
+
+            var dataset = [
+                {
+                    id: 'articles',
+                    name: 'Коллекция «Статьи»',
+                    handle: 'articles',
+                    elements: [
+                        { id: 'articles:1001', elementId: 1001, title: '10 трендов медиа 2025', slug: 'media-trends-2025', type: 'entry', status: 'Опубликовано' },
+                        { id: 'articles:1002', elementId: 1002, title: 'Как запустить подкаст за неделю', slug: 'launch-podcast-week', type: 'entry', status: 'Черновик' },
+                        { id: 'articles:1003', elementId: 1003, title: 'Media trends digest', slug: 'media-trends-digest', type: 'entry', status: 'Опубликовано' },
+                        { id: 'articles:1004', elementId: 1004, title: 'Редакторский стандарт 2.0', slug: 'editorial-standards', type: 'entry', status: 'На ревью' },
+                        { id: 'articles:1005', elementId: 1005, title: 'Расписание публикаций на март', slug: 'march-schedule', type: 'entry', status: 'Запланировано' }
+                    ]
+                },
+                {
+                    id: 'interviews',
+                    name: 'Коллекция «Интервью»',
+                    handle: 'interviews',
+                    elements: [
+                        { id: 'interviews:2001', elementId: 2001, title: 'Product talks: выпуск 12', slug: 'product-talks-12', type: 'entry', status: 'Опубликовано' },
+                        { id: 'interviews:2002', elementId: 2002, title: 'Как развивать редакцию в 2025', slug: 'grow-editorial-2025', type: 'entry', status: 'Черновик' },
+                        { id: 'interviews:2003', elementId: 2003, title: 'Культура удалённой команды', slug: 'remote-culture', type: 'entry', status: 'Опубликовано' }
+                    ]
+                },
+                {
+                    id: 'authors',
+                    name: 'Справочник «Авторы»',
+                    handle: 'authors',
+                    elements: [
+                        { id: 'author:501', elementId: 501, title: 'Анна Иванова', slug: 'anna-ivanova', type: 'author', status: 'Активен' },
+                        { id: 'author:502', elementId: 502, title: 'Борис Юрченко', slug: 'boris-yurchenko', type: 'author', status: 'Активен' },
+                        { id: 'author:503', elementId: 503, title: 'Elena Petrova', slug: 'elena-petrova', type: 'author', status: 'Активен' },
+                        { id: 'author:504', elementId: 504, title: 'Сергей Лебедев', slug: 'sergey-lebedev', type: 'author', status: 'Неактивен' }
+                    ]
+                }
+            ];
+
+            var self = this;
+            window.setTimeout(function () {
+                self.relationsDataset = dataset;
+                deferred.resolve(dataset);
+            }, 120);
+
+            return deferred.promise();
+        },
+
+        filterRelationElements: function (dataset, query) {
+            var normalized = $.trim(String(query || '')).toLowerCase();
+            var items = [];
+
+            $.each(dataset, function (_, group) {
+                var elements = group.elements || [];
+                var collectionName = group.name || '';
+                var handle = group.handle || '';
+
+                $.each(elements, function (_, element) {
+                    var title = element.title || '';
+                    var slug = element.slug || '';
+                    var haystack = (title + ' ' + slug + ' ' + collectionName + ' ' + handle).toLowerCase();
+
+                    if (!normalized || haystack.indexOf(normalized) !== -1) {
+                        items.push({
+                            id: element.id,
+                            text: title,
+                            slug: slug,
+                            collectionId: group.id,
+                            collectionName: collectionName,
+                            collectionHandle: handle,
+                            type: element.type || 'element',
+                            status: element.status || ''
+                        });
+                    }
+                });
+            });
+
+            items.sort(function (a, b) {
+                return a.text.localeCompare(b.text, 'ru');
+            });
+
+            return items;
+        },
+
+        groupRelationResults: function (items) {
+            var groups = {};
+
+            $.each(items, function (_, item) {
+                var key = String(item.collectionId || item.collectionName || 'default');
+                if (!groups[key]) {
+                    groups[key] = {
+                        text: item.collectionName || 'Элементы',
+                        id: key,
+                        children: []
+                    };
+                }
+
+                groups[key].children.push({
+                    id: item.id,
+                    text: item.text,
+                    slug: item.slug,
+                    collectionId: item.collectionId,
+                    collectionName: item.collectionName,
+                    collectionHandle: item.collectionHandle,
+                    type: item.type,
+                    status: item.status
+                });
+            });
+
+            return Object.keys(groups).map(function (key) {
+                return groups[key];
+            });
+        },
+
+        searchRelationElements: function (query, page) {
+            var self = this;
+            var deferred = $.Deferred();
+
+            this.getRelationsDataset().done(function (dataset) {
+                var items = self.filterRelationElements(dataset, query);
+                var perPage = 20;
+                var offset = (page - 1) * perPage;
+                if (offset < 0) {
+                    offset = 0;
+                }
+
+                var paginated = items.slice(offset, offset + perPage);
+                var grouped = self.groupRelationResults(paginated);
+
+                $.each(grouped, function (_, group) {
+                    $.each(group.children, function (_, child) {
+                        self.relationOptionsCache[child.id] = child;
+                    });
+                });
+
+                deferred.resolve({
+                    results: grouped,
+                    pagination: { more: offset + perPage < items.length }
+                });
+            }).fail(deferred.reject);
+
+            return deferred.promise();
+        },
+
+        loadRelationSelection: function () {
+            if (this.relationSavedSelection !== null) {
+                return this.relationSavedSelection;
+            }
+
+            var defaults = { source: null, target: null };
+            this.relationSavedSelection = defaults;
+
+            if (!window.localStorage) {
+                return defaults;
+            }
+
+            try {
+                var raw = window.localStorage.getItem(this.relationSelectionKey);
+                if (!raw) {
+                    return defaults;
+                }
+
+                var parsed = JSON.parse(raw);
+                if (parsed && typeof parsed === 'object') {
+                    this.relationSavedSelection = {
+                        source: parsed.source || null,
+                        target: parsed.target || null
+                    };
+                }
+            } catch (error) {
+                this.relationSavedSelection = defaults;
+            }
+
+            var savedSource = this.relationSavedSelection.source;
+            if (savedSource && savedSource.id) {
+                this.relationOptionsCache[savedSource.id] = savedSource;
+            }
+
+            var savedTarget = this.relationSavedSelection.target;
+            if (savedTarget && savedTarget.id) {
+                this.relationOptionsCache[savedTarget.id] = savedTarget;
+            }
+
+            return this.relationSavedSelection;
+        },
+
+        getRelationSavedSelection: function (type) {
+            var saved = this.loadRelationSelection();
+            if (!saved || !saved[type]) {
+                return null;
+            }
+
+            return saved[type];
+        },
+
+        saveRelationSelection: function (type, data) {
+            var current = this.loadRelationSelection();
+            var selection = null;
+
+            if (data && data.length) {
+                var item = data[0];
+                var cached = this.relationOptionsCache[item.id] || {};
+
+                selection = {
+                    id: item.id,
+                    text: item.text || cached.text || '',
+                    collectionId: item.collectionId || cached.collectionId || null,
+                    collectionName: item.collectionName || cached.collectionName || null,
+                    collectionHandle: item.collectionHandle || cached.collectionHandle || null,
+                    slug: item.slug || cached.slug || null,
+                    type: item.type || cached.type || null,
+                    status: item.status || cached.status || null
+                };
+
+                this.relationOptionsCache[item.id] = selection;
+            }
+
+            current[type] = selection;
+            this.relationSavedSelection = current;
+
+            if (!window.localStorage) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(this.relationSelectionKey, JSON.stringify(current));
+            } catch (error) {
+                // ignore storage errors
+            }
+        },
+
+        initMediaLibraryModule: function () {
+            var $library = $('[data-role="media-library"]');
+            if (!$library.length) {
+                return;
+            }
+
+            var self = this;
+            if (!$library.data('mediaLibraryInitialized')) {
+                $library.data('mediaLibraryInitialized', true);
+            }
+
+            this.getMediaAssets().done(function (assets) {
+                self.mediaLibraryFilters = {
+                    search: '',
+                    type: '',
+                    collection: '',
+                    tags: [],
+                    period: '30'
+                };
+                self.mediaLibrarySelection = [];
+                self.mediaLibraryViewMode = 'grid';
+
+                self.populateMediaFilterOptions($library, assets);
+                self.bindMediaLibraryEvents($library);
+                self.renderMediaLibrary($library);
+            });
+        },
+
+        getMediaAssets: function () {
+            var deferred = $.Deferred();
+            if (this.mediaAssetsDataset) {
+                deferred.resolve(this.mediaAssetsDataset);
+                return deferred.promise();
+            }
+
+            var assets = [
+                {
+                    id: 'asset-501',
+                    title: 'Редакция в работе',
+                    filename: 'team-working.jpg',
+                    type: 'image',
+                    size: 1245780,
+                    width: 1920,
+                    height: 1080,
+                    preview: 'https://via.placeholder.com/600x400?text=Team',
+                    thumb: 'https://via.placeholder.com/360x220?text=Team',
+                    url: 'https://cdn.example.com/assets/team-working.jpg',
+                    collection: 'articles',
+                    collectionName: 'Статьи',
+                    tags: ['editorial', 'workflow'],
+                    createdAt: '2025-03-08T10:15:00+03:00'
+                },
+                {
+                    id: 'asset-502',
+                    title: 'Главный баннер весны',
+                    filename: 'hero-banner.png',
+                    type: 'image',
+                    size: 2150042,
+                    width: 2560,
+                    height: 1440,
+                    preview: 'https://via.placeholder.com/600x400?text=Banner',
+                    thumb: 'https://via.placeholder.com/360x220?text=Banner',
+                    url: 'https://cdn.example.com/assets/hero-banner.png',
+                    collection: 'news',
+                    collectionName: 'Новости',
+                    tags: ['promo', 'homepage'],
+                    createdAt: '2025-02-21T08:50:00+03:00'
+                },
+                {
+                    id: 'asset-503',
+                    title: 'Brand story 2025',
+                    filename: 'brand-story.mp4',
+                    type: 'video',
+                    size: 18520480,
+                    duration: 210,
+                    preview: 'https://via.placeholder.com/600x400?text=Video',
+                    thumb: 'https://via.placeholder.com/360x220?text=Video',
+                    url: 'https://cdn.example.com/assets/brand-story.mp4',
+                    collection: 'interviews',
+                    collectionName: 'Интервью',
+                    tags: ['branding', 'events'],
+                    createdAt: '2025-03-02T12:00:00+03:00'
+                },
+                {
+                    id: 'asset-504',
+                    title: 'Редакторский гайд 2025',
+                    filename: 'editorial-guide.pdf',
+                    type: 'document',
+                    size: 842312,
+                    url: 'https://cdn.example.com/assets/editorial-guide.pdf',
+                    collection: 'articles',
+                    collectionName: 'Статьи',
+                    tags: ['workflow', 'guideline'],
+                    createdAt: '2025-01-16T14:35:00+03:00'
+                },
+                {
+                    id: 'asset-505',
+                    title: 'Podcast intro 2025',
+                    filename: 'podcast-intro.mp3',
+                    type: 'audio',
+                    size: 5234400,
+                    duration: 95,
+                    url: 'https://cdn.example.com/assets/podcast-intro.mp3',
+                    collection: 'articles',
+                    collectionName: 'Статьи',
+                    tags: ['podcast', 'audio'],
+                    createdAt: '2025-02-10T18:05:00+03:00'
+                },
+                {
+                    id: 'asset-506',
+                    title: 'Обложка рассылки март',
+                    filename: 'newsletter-cover.jpg',
+                    type: 'image',
+                    size: 612304,
+                    width: 1280,
+                    height: 720,
+                    preview: 'https://via.placeholder.com/600x400?text=Newsletter',
+                    thumb: 'https://via.placeholder.com/360x220?text=Newsletter',
+                    url: 'https://cdn.example.com/assets/newsletter-cover.jpg',
+                    collection: 'articles',
+                    collectionName: 'Статьи',
+                    tags: ['newsletter', 'promo'],
+                    createdAt: '2025-03-06T09:40:00+03:00'
+                },
+                {
+                    id: 'asset-507',
+                    title: 'Команда редакции',
+                    filename: 'culture-team.jpg',
+                    type: 'image',
+                    size: 1480230,
+                    width: 2048,
+                    height: 1365,
+                    preview: 'https://via.placeholder.com/600x400?text=Culture',
+                    thumb: 'https://via.placeholder.com/360x220?text=Culture',
+                    url: 'https://cdn.example.com/assets/culture-team.jpg',
+                    collection: 'interviews',
+                    collectionName: 'Интервью',
+                    tags: ['culture', 'people'],
+                    createdAt: '2025-02-28T11:20:00+03:00'
+                },
+                {
+                    id: 'asset-508',
+                    title: 'Media kit 2025',
+                    filename: 'media-kit.zip',
+                    type: 'archive',
+                    size: 12288000,
+                    url: 'https://cdn.example.com/assets/media-kit.zip',
+                    collection: 'news',
+                    collectionName: 'Новости',
+                    tags: ['press', 'kit'],
+                    createdAt: '2024-12-18T16:10:00+03:00'
+                },
+                {
+                    id: 'asset-509',
+                    title: 'Интервью. Фрагмент видео',
+                    filename: 'interview-snippet.mp4',
+                    type: 'video',
+                    size: 9520480,
+                    duration: 135,
+                    preview: 'https://via.placeholder.com/600x400?text=Interview',
+                    thumb: 'https://via.placeholder.com/360x220?text=Interview',
+                    url: 'https://cdn.example.com/assets/interview-snippet.mp4',
+                    collection: 'interviews',
+                    collectionName: 'Интервью',
+                    tags: ['video', 'product'],
+                    createdAt: '2025-03-03T15:25:00+03:00'
+                },
+                {
+                    id: 'asset-510',
+                    title: 'Инфографика. Метрики',
+                    filename: 'infographic-metrics.png',
+                    type: 'image',
+                    size: 1765340,
+                    width: 2000,
+                    height: 1125,
+                    preview: 'https://via.placeholder.com/600x400?text=Metrics',
+                    thumb: 'https://via.placeholder.com/360x220?text=Metrics',
+                    url: 'https://cdn.example.com/assets/infographic-metrics.png',
+                    collection: 'news',
+                    collectionName: 'Новости',
+                    tags: ['analytics', 'report'],
+                    createdAt: '2025-01-28T10:05:00+03:00'
+                }
+            ];
+
+            var self = this;
+            window.setTimeout(function () {
+                self.mediaAssetsDataset = assets;
+                self.mediaAssetsIndex = {};
+                $.each(assets, function (_, asset) {
+                    if (asset && asset.id) {
+                        self.mediaAssetsIndex[String(asset.id)] = asset;
+                    }
+                });
+                deferred.resolve(self.mediaAssetsDataset);
+            }, 150);
+
+            return deferred.promise();
+        },
+
+        populateMediaFilterOptions: function ($library, assets) {
+            var self = this;
+            var $type = $library.find('[data-role="media-filter-type"]');
+            var $collection = $library.find('[data-role="media-filter-collection"]');
+            var $tags = $library.find('[data-role="media-filter-tags"]');
+
+            var typeOptions = {};
+            var collectionOptions = {};
+            var tags = {};
+
+            $.each(assets, function (_, asset) {
+                var type = asset.type || 'other';
+                typeOptions[type] = self.getMediaTypeLabel(type);
+
+                if (asset.collection) {
+                    collectionOptions[asset.collection] = asset.collectionName || asset.collection;
+                }
+
+                $.each(asset.tags || [], function (_, tag) {
+                    tags[tag] = true;
+                });
+            });
+
+            $type.empty();
+            $type.append($('<option></option>').attr('value', '').text('Все типы'));
+            $.each(typeOptions, function (value, label) {
+                $type.append($('<option></option>').attr('value', value).text(label));
+            });
+
+            $collection.empty();
+            $collection.append($('<option></option>').attr('value', '').text('Все коллекции'));
+            $.each(collectionOptions, function (value, label) {
+                $collection.append($('<option></option>').attr('value', value).text(label));
+            });
+
+            $tags.empty();
+            Object.keys(tags).sort().forEach(function (tag) {
+                $tags.append($('<option></option>').attr('value', tag).text(tag));
+            });
+
+            $library.find('[data-role="media-filter-period"]').val('30').trigger('change.select2');
+            $type.trigger('change.select2');
+            $collection.trigger('change.select2');
+            $tags.trigger('change.select2');
+        },
+
+        bindMediaLibraryEvents: function ($library) {
+            var self = this;
+            if ($library.data('mediaLibraryBound')) {
+                return;
+            }
+            $library.data('mediaLibraryBound', true);
+
+            var searchTimer = null;
+
+            $library.on('input', '[data-role="media-search"]', function () {
+                var value = $(this).val();
+                window.clearTimeout(searchTimer);
+                searchTimer = window.setTimeout(function () {
+                    self.mediaLibraryFilters.search = String(value || '').trim();
+                    self.renderMediaLibrary($library);
+                }, 200);
+            });
+
+            $library.on('change', '[data-role="media-filter-type"]', function () {
+                self.mediaLibraryFilters.type = String($(this).val() || '');
+                self.renderMediaLibrary($library);
+            });
+
+            $library.on('change', '[data-role="media-filter-collection"]', function () {
+                self.mediaLibraryFilters.collection = String($(this).val() || '');
+                self.renderMediaLibrary($library);
+            });
+
+            $library.on('change', '[data-role="media-filter-tags"]', function () {
+                var values = $(this).val() || [];
+                self.mediaLibraryFilters.tags = $.isArray(values) ? values.slice() : [values];
+                self.renderMediaLibrary($library);
+            });
+
+            $library.on('change', '[data-role="media-filter-period"]', function () {
+                self.mediaLibraryFilters.period = String($(this).val() || 'all');
+                self.renderMediaLibrary($library);
+            });
+
+            $library.on('click', '[data-role="media-view-mode"] button', function (event) {
+                event.preventDefault();
+                var mode = String($(this).attr('data-mode') || 'grid');
+                self.setMediaLibraryViewMode(mode, $library);
+            });
+
+            $(document).on('click', '[data-action="toggle-media-filters"]', function (event) {
+                event.preventDefault();
+                var $panel = $library.find('[data-role="media-filters-panel"]');
+                if ($panel.length) {
+                    $panel.slideToggle(150);
+                }
+            });
+
+            $library.on('click', '[data-role="media-item"]', function (event) {
+                if ($(event.target).is('button, a, i')) {
+                    return;
+                }
+                var id = $(this).attr('data-id');
+                if (!id) {
+                    return;
+                }
+                self.toggleMediaSelection(id);
+                self.syncMediaSelectionUI($library);
+            });
+
+            $library.on('click', '[data-action="clear-selection"]', function (event) {
+                event.preventDefault();
+                self.clearMediaSelection($library);
+            });
+
+            $library.on('click', '[data-action="insert-selection"]', function (event) {
+                event.preventDefault();
+                self.outputMediaSelection($library);
+            });
+
+            $library.on('click', '[data-action="refresh-library"]', function (event) {
+                event.preventDefault();
+                var $loading = $library.find('[data-role="media-loading"]');
+                $loading.stop(true, true).fadeIn(120);
+                window.setTimeout(function () {
+                    $loading.fadeOut(160);
+                    self.renderMediaLibrary($library);
+                }, 400);
+            });
+        },
+
+        applyMediaFilters: function (assets) {
+            var filters = this.mediaLibraryFilters || {};
+            var search = (filters.search || '').toLowerCase();
+            var typeFilter = filters.type || '';
+            var collectionFilter = filters.collection || '';
+            var tagsFilter = filters.tags || [];
+            var period = filters.period || 'all';
+            var now = new Date();
+
+            return assets.filter(function (asset) {
+                if (typeFilter && asset.type !== typeFilter) {
+                    return false;
+                }
+
+                if (collectionFilter && asset.collection !== collectionFilter) {
+                    return false;
+                }
+
+                if (tagsFilter && tagsFilter.length) {
+                    var assetTags = asset.tags || [];
+                    var hasTag = tagsFilter.some(function (tag) {
+                        return assetTags.indexOf(tag) !== -1;
+                    });
+                    if (!hasTag) {
+                        return false;
+                    }
+                }
+
+                if (period && period !== 'all') {
+                    var days = parseInt(period, 10);
+                    if (!isNaN(days) && days > 0) {
+                        var assetDate = new Date(asset.createdAt || asset.updatedAt || asset.uploadedAt || 0);
+                        if (assetDate.toString() !== 'Invalid Date') {
+                            var diff = now - assetDate;
+                            if (diff > days * 86400000) {
+                                return false;
+                            }
+                        }
+                    }
+                }
+
+                if (search) {
+                    var haystack = (asset.title + ' ' + asset.filename + ' ' + (asset.collectionName || '') + ' ' + (asset.tags || []).join(' ')).toLowerCase();
+                    if (haystack.indexOf(search) === -1) {
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+        },
+
+        renderMediaLibrary: function ($library) {
+            var assets = this.mediaAssetsDataset || [];
+            var filtered = this.applyMediaFilters(assets);
+            var $items = $library.find('[data-role="media-items"]');
+            var $list = $library.find('[data-role="media-list"]');
+            var $empty = $library.find('[data-role="media-empty"]');
+
+            $items.empty();
+            $list.empty();
+
+            if (!filtered.length) {
+                $empty.show();
+                $items.hide();
+                $list.hide();
+                this.updateMediaSelectionSummary($library);
+                return;
+            }
+
+            $empty.hide();
+
+            if (this.mediaLibraryViewMode === 'list') {
+                this.renderMediaList($list, filtered);
+                $list.show();
+                $items.hide();
+            } else {
+                this.renderMediaGrid($items, filtered);
+                $items.show();
+                $list.hide();
+            }
+
+            this.syncMediaSelectionUI($library);
+        },
+
+        renderMediaGrid: function ($container, assets) {
+            var self = this;
+            $container.empty();
+
+            $.each(assets, function (_, asset) {
+                var $col = $('<div class="col-sm-3 col-xs-6 media-library__col"></div>');
+                var $card = $('<div class="media-library__item thumbnail" data-role="media-item"></div>');
+                $card.attr('data-id', asset.id);
+                $card.attr('data-type', asset.type);
+                $card.attr('data-collection', asset.collection);
+
+                var $preview = $('<div class="media-library__preview"></div>');
+                if (asset.type === 'image' && asset.thumb) {
+                    $preview.append($('<img>').attr('src', asset.thumb).attr('alt', asset.title));
+                } else {
+                    var icon = 'file-o';
+                    if (asset.type === 'video') {
+                        icon = 'film';
+                    } else if (asset.type === 'audio') {
+                        icon = 'music';
+                    } else if (asset.type === 'document') {
+                        icon = 'file-text-o';
+                    } else if (asset.type === 'archive') {
+                        icon = 'archive';
+                    }
+                    $preview.append('<div class="media-library__icon"><i class="fa fa-' + icon + '"></i></div>');
+                }
+                $card.append($preview);
+
+                var $caption = $('<div class="media-library__caption"></div>');
+                $caption.append($('<strong class="media-library__title"></strong>').text(asset.title));
+
+                var meta = [];
+                if (asset.filename) {
+                    meta.push(asset.filename);
+                }
+                meta.push(self.getMediaTypeLabel(asset.type));
+                if (asset.size) {
+                    meta.push(self.formatFileSize(asset.size));
+                }
+                if (asset.collectionName) {
+                    meta.push(asset.collectionName);
+                }
+                if (asset.createdAt) {
+                    meta.push(self.formatDateLabel(asset.createdAt));
+                }
+
+                $caption.append($('<div class="media-library__meta text-muted"></div>').text(meta.join(' • ')));
+                $card.append($caption);
+                $col.append($card);
+                $container.append($col);
+            });
+        },
+
+        renderMediaList: function ($container, assets) {
+            var self = this;
+            $container.empty();
+
+            $.each(assets, function (_, asset) {
+                var $row = $('<div class="media-library__list-item media-library__item" data-role="media-item"></div>');
+                $row.attr('data-id', asset.id);
+                $row.attr('data-type', asset.type);
+                $row.attr('data-collection', asset.collection);
+
+                var $title = $('<div class="media-library__list-title"></div>').text(asset.title);
+                var metaParts = [];
+                metaParts.push(self.getMediaTypeLabel(asset.type));
+                if (asset.filename) {
+                    metaParts.push(asset.filename);
+                }
+                if (asset.collectionName) {
+                    metaParts.push(asset.collectionName);
+                }
+                if (asset.size) {
+                    metaParts.push(self.formatFileSize(asset.size));
+                }
+                if (asset.duration) {
+                    var durationLabel = self.formatMediaDuration(asset.duration);
+                    if (durationLabel) {
+                        metaParts.push(durationLabel);
+                    }
+                }
+                if (asset.createdAt) {
+                    metaParts.push(self.formatDateLabel(asset.createdAt));
+                }
+
+                var $meta = $('<div class="media-library__list-meta text-muted"></div>').text(metaParts.join(' • '));
+                $row.append($title).append($meta);
+                $container.append($row);
+            });
+        },
+
+        setMediaLibraryViewMode: function (mode, $library) {
+            var nextMode = mode === 'list' ? 'list' : 'grid';
+            this.mediaLibraryViewMode = nextMode;
+            $library.find('[data-role="media-view-mode"] button').removeClass('active');
+            $library.find('[data-role="media-view-mode"] button[data-mode="' + nextMode + '"]').addClass('active');
+            this.renderMediaLibrary($library);
+        },
+
+        toggleMediaSelection: function (assetId) {
+            var id = String(assetId);
+            var index = this.mediaLibrarySelection.indexOf(id);
+            if (index === -1) {
+                this.mediaLibrarySelection.push(id);
+            } else {
+                this.mediaLibrarySelection.splice(index, 1);
+            }
+        },
+
+        syncMediaSelectionUI: function ($library) {
+            var selected = this.mediaLibrarySelection;
+            $library.find('[data-role="media-item"]').each(function () {
+                var $item = $(this);
+                var id = String($item.attr('data-id') || '');
+                if (selected.indexOf(id) !== -1) {
+                    $item.addClass('media-library__item--selected');
+                } else {
+                    $item.removeClass('media-library__item--selected');
+                }
+            });
+            this.updateMediaSelectionSummary($library);
+        },
+
+        updateMediaSelectionSummary: function ($library) {
+            var count = this.mediaLibrarySelection.length;
+            $library.find('[data-role="selected-count"]').text(count);
+        },
+
+        clearMediaSelection: function ($library) {
+            this.mediaLibrarySelection = [];
+            this.syncMediaSelectionUI($library);
+            $library.find('[data-role="media-selection-input"]').val('');
+            $library.find('[data-role="media-selection-output"]').val('');
+            var $feedback = $library.find('[data-role="media-selection-feedback"]');
+            if ($feedback.length) {
+                $feedback.removeClass('text-danger text-success').text('');
+            }
+        },
+
+        outputMediaSelection: function ($library) {
+            var payload = this.getMediaSelectionPayload();
+            var $feedback = $library.find('[data-role="media-selection-feedback"]');
+
+            if (!payload.length) {
+                if ($feedback.length) {
+                    $feedback.removeClass('text-success').addClass('text-danger').text('Выберите хотя бы один ассет для вставки.');
+                }
+                return;
+            }
+
+            var json = JSON.stringify(payload, null, 2);
+            $library.find('[data-role="media-selection-input"]').val(json);
+            $library.find('[data-role="media-selection-output"]').val(json);
+
+            if ($feedback.length) {
+                var titles = payload.map(function (item) { return item.title; });
+                var preview = titles.slice(0, 3).join(', ');
+                if (titles.length > 3) {
+                    preview += ' и ещё ' + (titles.length - 3);
+                }
+                $feedback.removeClass('text-danger').addClass('text-success').text('Добавлено ' + payload.length + ' ассетов: ' + preview + '.');
+            }
+        },
+
+        getMediaSelectionPayload: function () {
+            var self = this;
+            return this.mediaLibrarySelection.map(function (id) {
+                var asset = self.findMediaAsset(id);
+                if (!asset) {
+                    return null;
+                }
+
+                return {
+                    id: asset.id,
+                    title: asset.title,
+                    filename: asset.filename,
+                    type: asset.type,
+                    typeLabel: self.getMediaTypeLabel(asset.type),
+                    size: asset.size,
+                    sizeHuman: self.formatFileSize(asset.size),
+                    url: asset.url,
+                    preview: asset.preview || asset.thumb || '',
+                    collection: asset.collection,
+                    collectionName: asset.collectionName,
+                    tags: asset.tags || [],
+                    createdAt: asset.createdAt
+                };
+            }).filter(function (item) { return item !== null; });
+        },
+
+        findMediaAsset: function (assetId) {
+            var key = String(assetId || '');
+            if (!key) {
+                return null;
+            }
+
+            return this.mediaAssetsIndex[key] || null;
+        },
+
+        formatFileSize: function (bytes) {
+            var size = parseInt(bytes, 10);
+            if (isNaN(size) || size <= 0) {
+                return '';
+            }
+
+            var units = ['Б', 'КБ', 'МБ', 'ГБ'];
+            var index = 0;
+            var value = size;
+
+            while (value >= 1024 && index < units.length - 1) {
+                value = value / 1024;
+                index += 1;
+            }
+
+            var formatted = index === 0 ? Math.round(value).toString() : value.toFixed(1);
+            return formatted + ' ' + units[index];
+        },
+
+        formatMediaDuration: function (value) {
+            var seconds = parseInt(value, 10);
+            if (isNaN(seconds) || seconds <= 0) {
+                return '';
+            }
+
+            var minutes = Math.floor(seconds / 60);
+            var rest = seconds % 60;
+            return minutes + ':' + (rest < 10 ? '0' + rest : rest);
+        },
+
+        formatDateLabel: function (value) {
+            if (!value) {
+                return '';
+            }
+
+            var date = new Date(value);
+            if (date.toString() === 'Invalid Date') {
+                return value;
+            }
+
+            var day = date.getDate();
+            var month = date.getMonth() + 1;
+            var year = date.getFullYear();
+            var dayLabel = day < 10 ? '0' + day : String(day);
+            var monthLabel = month < 10 ? '0' + month : String(month);
+
+            return dayLabel + '.' + monthLabel + '.' + year;
+        },
+
+        getMediaTypeLabel: function (type) {
+            var map = {
+                image: 'Изображение',
+                video: 'Видео',
+                audio: 'Аудио',
+                document: 'Документ',
+                archive: 'Архив',
+                other: 'Файл'
+            };
+
+            var key = String(type || 'other');
+            return map[key] || map.other;
+        },
+
+        initTaxonomyTermsModule: function () {
+            var $container = $('[data-role="taxonomy-terms"]');
+            if (!$container.length) {
+                return;
+            }
+
+            var self = this;
+            this.getTaxonomyDataset().done(function (dataset) {
+                self.populateTaxonomyFilter($container, dataset);
+
+                var storedHandle = self.loadTaxonomyHandle();
+                if (storedHandle && self.findTaxonomyByHandle(storedHandle)) {
+                    self.taxonomyCurrentHandle = storedHandle;
+                } else if (dataset.length) {
+                    self.taxonomyCurrentHandle = dataset[0].handle;
+                } else {
+                    self.taxonomyCurrentHandle = '';
+                }
+
+                var $filter = $container.find('[data-role="taxonomy-filter"]');
+                if ($filter.length) {
+                    $filter.val(self.taxonomyCurrentHandle).trigger('change.select2');
+                }
+
+                self.bindTaxonomyEvents($container);
+                self.renderTaxonomyTree($container);
+            });
+        },
+
+        getTaxonomyDataset: function () {
+            var deferred = $.Deferred();
+            if (this.taxonomyDataset) {
+                deferred.resolve(this.taxonomyDataset);
+                return deferred.promise();
+            }
+
+            var dataset = [
+                {
+                    handle: 'topics',
+                    name: 'Темы',
+                    terms: [
+                        {
+                            id: 'analytics',
+                            slug: 'analytics',
+                            name: 'Аналитика',
+                            usage: 48,
+                            description: 'Материалы с аналитикой, исследованиями и статистикой.',
+                            children: [
+                                { id: 'audience-research', slug: 'audience-research', name: 'Исследования аудитории', usage: 14, children: [] },
+                                { id: 'market-trends', slug: 'market-trends', name: 'Рыночные тренды', usage: 9, children: [] }
+                            ]
+                        },
+                        {
+                            id: 'marketing',
+                            slug: 'marketing',
+                            name: 'Маркетинг',
+                            usage: 36,
+                            children: [
+                                { id: 'campaigns', slug: 'campaigns', name: 'Кампании', usage: 12, children: [] },
+                                { id: 'social-media', slug: 'social-media', name: 'Соцсети', usage: 8, children: [] }
+                            ]
+                        },
+                        {
+                            id: 'workflow',
+                            slug: 'workflow',
+                            name: 'Процессы',
+                            usage: 22,
+                            children: [
+                                { id: 'guidelines', slug: 'guidelines', name: 'Гайды', usage: 11, children: [] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    handle: 'channels',
+                    name: 'Каналы распространения',
+                    terms: [
+                        { id: 'site', slug: 'site', name: 'Сайт', usage: 120, children: [] },
+                        { id: 'magazine', slug: 'magazine', name: 'Журнал', usage: 45, children: [] },
+                        {
+                            id: 'newsletter',
+                            slug: 'newsletter',
+                            name: 'Рассылка',
+                            usage: 60,
+                            children: [
+                                { id: 'newsletter-weekly', slug: 'newsletter-weekly', name: 'Еженедельная', usage: 25, children: [] },
+                                { id: 'newsletter-special', slug: 'newsletter-special', name: 'Спецвыпуски', usage: 14, children: [] }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    handle: 'regions',
+                    name: 'Регионы',
+                    terms: [
+                        { id: 'moscow', slug: 'moscow', name: 'Москва', usage: 30, children: [] },
+                        { id: 'spb', slug: 'spb', name: 'Санкт-Петербург', usage: 21, children: [] },
+                        {
+                            id: 'global',
+                            slug: 'global',
+                            name: 'Мир',
+                            usage: 56,
+                            children: [
+                                { id: 'europe', slug: 'europe', name: 'Европа', usage: 16, children: [] },
+                                { id: 'asia', slug: 'asia', name: 'Азия', usage: 12, children: [] }
+                            ]
+                        }
+                    ]
+                }
+            ];
+
+            var self = this;
+            window.setTimeout(function () {
+                self.taxonomyDataset = dataset;
+                deferred.resolve(dataset);
+            }, 120);
+
+            return deferred.promise();
+        },
+
+        populateTaxonomyFilter: function ($container, dataset) {
+            var $filter = $container.find('[data-role="taxonomy-filter"]');
+            if (!$filter.length) {
+                return;
+            }
+
+            $filter.empty();
+            $filter.append($('<option></option>').attr('value', '').text('Все таксономии'));
+
+            $.each(dataset, function (_, taxonomy) {
+                if (!taxonomy || !taxonomy.handle) {
+                    return;
+                }
+
+                $filter.append($('<option></option>').attr('value', taxonomy.handle).text(taxonomy.name || taxonomy.handle));
+            });
+
+            $filter.trigger('change.select2');
+        },
+
+        bindTaxonomyEvents: function ($container) {
+            if ($container.data('taxonomyModuleBound')) {
+                return;
+            }
+            $container.data('taxonomyModuleBound', true);
+
+            var self = this;
+            var searchTimer = null;
+
+            $container.on('change', '[data-role="taxonomy-filter"]', function () {
+                var value = $(this).val();
+                self.taxonomyCurrentHandle = String(value || '');
+                self.persistTaxonomyHandle(self.taxonomyCurrentHandle);
+                self.renderTaxonomyTree($container);
+            });
+
+            $container.on('input', '[data-role="term-search"]', function () {
+                var value = $(this).val();
+                window.clearTimeout(searchTimer);
+                searchTimer = window.setTimeout(function () {
+                    self.taxonomySearchQuery = String(value || '').trim().toLowerCase();
+                    self.renderTaxonomyTree($container);
+                }, 200);
+            });
+        },
+
+        renderTaxonomyTree: function ($container) {
+            var $tree = $container.find('[data-role="terms-tree"]');
+            var $empty = $container.find('[data-role="terms-empty"]');
+            if (!$tree.length) {
+                return;
+            }
+
+            var dataset = this.taxonomyDataset || [];
+            var handle = this.taxonomyCurrentHandle || '';
+            var taxonomy = handle ? this.findTaxonomyByHandle(handle) : (dataset[0] || null);
+
+            if (!taxonomy) {
+                $tree.empty();
+                $empty.show();
+                this.renderTaxonomySummary($container, null, []);
+                return;
+            }
+
+            this.taxonomyCurrentIndex = {};
+            this.buildTaxonomyIndex(taxonomy.terms || [], this.taxonomyCurrentIndex);
+
+            var filtered = this.filterTaxonomyTerms(taxonomy.terms || [], this.taxonomySearchQuery || '');
+
+            $tree.empty();
+            if (!filtered.length) {
+                $empty.show();
+            } else {
+                $empty.hide();
+                var self = this;
+                $.each(filtered, function (_, term) {
+                    $tree.append(self.createTaxonomyTermNode(term, 0));
+                });
+            }
+
+            this.destroyTaxonomySortable();
+            this.attachTaxonomySortable($container);
+            this.renderTaxonomySummary($container, taxonomy, filtered);
+        },
+
+        filterTaxonomyTerms: function (terms, query) {
+            var self = this;
+            var normalized = $.trim(query || '').toLowerCase();
+            var result = [];
+
+            $.each(terms, function (_, term) {
+                if (!term || !term.id) {
+                    return;
+                }
+
+                var children = term.children || [];
+                var filteredChildren = self.filterTaxonomyTerms(children, normalized);
+                var match = false;
+                if (!normalized) {
+                    match = true;
+                } else {
+                    var haystack = (term.name + ' ' + term.slug).toLowerCase();
+                    match = haystack.indexOf(normalized) !== -1;
+                }
+
+                if (match || filteredChildren.length) {
+                    var clone = $.extend(true, {}, term);
+                    clone.children = filteredChildren;
+                    clone._match = match && normalized !== '';
+                    result.push(clone);
+                }
+            });
+
+            return result;
+        },
+
+        createTaxonomyTermNode: function (term, depth) {
+            var self = this;
+            var $item = $('<li class="taxonomy-term-item"></li>');
+            $item.attr('data-term-id', term.id);
+            $item.attr('data-depth', depth);
+
+            var $card = $('<div class="taxonomy-term-card" data-role="term-node"></div>');
+            if (term._match) {
+                $card.addClass('taxonomy-term-card--match');
+            }
+
+            var $header = $('<div class="taxonomy-term-card__header"></div>');
+            var $handle = $('<span class="taxonomy-term-card__handle" data-role="term-drag-handle"><i class="fa fa-bars"></i></span>');
+            $header.append($handle);
+
+            var $labels = $('<div class="taxonomy-term-card__labels"></div>');
+            $labels.append($('<strong class="taxonomy-term-card__title"></strong>').text(term.name || term.slug || term.id));
+            if (term.slug) {
+                $labels.append($('<code class="taxonomy-term-card__slug"></code>').text(term.slug));
+            }
+            $header.append($labels);
+
+            if (typeof term.usage !== 'undefined') {
+                $header.append($('<span class="badge taxonomy-term-card__badge"></span>').text(term.usage));
+            }
+
+            $card.append($header);
+
+            if (term.description) {
+                $card.append($('<div class="taxonomy-term-card__description text-muted"></div>').text(term.description));
+            }
+
+            $item.append($card);
+
+            var $childrenList = $('<ul class="taxonomy-term-children list-unstyled" data-role="term-children"></ul>');
+            $.each(term.children || [], function (_, child) {
+                $childrenList.append(self.createTaxonomyTermNode(child, depth + 1));
+            });
+            $item.append($childrenList);
+
+            return $item;
+        },
+
+        attachTaxonomySortable: function ($container) {
+            if (typeof window.Sortable === 'undefined') {
+                return;
+            }
+
+            var self = this;
+            var $lists = $container.find('[data-role="terms-tree"], [data-role="term-children"]');
+
+            $lists.each(function () {
+                var element = this;
+                if (element._taxonomySortable) {
+                    element._taxonomySortable.destroy();
+                }
+
+                element._taxonomySortable = window.Sortable.create(element, {
+                    group: 'taxonomy-terms',
+                    animation: 150,
+                    handle: '[data-role="term-drag-handle"]',
+                    ghostClass: 'taxonomy-term-card--ghost',
+                    onEnd: function () {
+                        self.handleTaxonomyReorder($container);
+                    }
+                });
+
+                self.taxonomySortableInstances.push(element._taxonomySortable);
+            });
+        },
+
+        destroyTaxonomySortable: function () {
+            $.each(this.taxonomySortableInstances || [], function (_, sortable) {
+                if (sortable && typeof sortable.destroy === 'function') {
+                    sortable.destroy();
+                }
+            });
+
+            this.taxonomySortableInstances = [];
+        },
+
+        handleTaxonomyReorder: function ($container) {
+            this.applyTaxonomyDomOrder($container);
+            var self = this;
+            window.setTimeout(function () {
+                self.renderTaxonomyTree($container);
+                self.showTaxonomyFeedback($container, 'Порядок терминов обновлён.', 'success');
+            }, 60);
+        },
+
+        applyTaxonomyDomOrder: function ($container) {
+            var handle = this.taxonomyCurrentHandle;
+            if (!handle) {
+                return;
+            }
+
+            var taxonomy = this.findTaxonomyByHandle(handle);
+            if (!taxonomy) {
+                return;
+            }
+
+            var $root = $container.find('[data-role="terms-tree"]').first();
+            if (!$root.length) {
+                return;
+            }
+
+            var structure = this.parseTaxonomyDom($root.get(0));
+            taxonomy.terms = this.buildTaxonomyTreeFromStructure(structure, this.taxonomyCurrentIndex || {});
+        },
+
+        parseTaxonomyDom: function (element) {
+            var self = this;
+            var result = [];
+
+            $(element).children('[data-term-id]').each(function () {
+                var $item = $(this);
+                var id = String($item.attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                var $childrenList = $item.children('[data-role="term-children"]');
+                var children = $childrenList.length ? self.parseTaxonomyDom($childrenList.get(0)) : [];
+                result.push({ id: id, children: children });
+            });
+
+            return result;
+        },
+
+        buildTaxonomyIndex: function (terms, index) {
+            var self = this;
+            $.each(terms, function (_, term) {
+                if (!term || !term.id) {
+                    return;
+                }
+
+                index[term.id] = $.extend(true, {}, term);
+                self.buildTaxonomyIndex(term.children || [], index);
+            });
+        },
+
+        buildTaxonomyTreeFromStructure: function (structure, index) {
+            var self = this;
+            var result = [];
+
+            $.each(structure || [], function (_, item) {
+                if (!item || !item.id) {
+                    return;
+                }
+
+                var source = index[item.id];
+                if (!source) {
+                    return;
+                }
+
+                var clone = $.extend(true, {}, source);
+                clone.children = self.buildTaxonomyTreeFromStructure(item.children || [], index);
+                result.push(clone);
+            });
+
+            return result;
+        },
+
+        countTaxonomyTerms: function (terms) {
+            var self = this;
+            var count = 0;
+
+            $.each(terms || [], function (_, term) {
+                count += 1;
+                if (term.children && term.children.length) {
+                    count += self.countTaxonomyTerms(term.children);
+                }
+            });
+
+            return count;
+        },
+
+        renderTaxonomySummary: function ($container, taxonomy, filtered) {
+            var $summary = $container.find('[data-role="terms-summary"]');
+            if (!$summary.length) {
+                return;
+            }
+
+            if (!taxonomy) {
+                $summary.text('Выберите таксономию для работы с терминами.');
+                return;
+            }
+
+            var total = this.countTaxonomyTerms(taxonomy.terms || []);
+            var visible = this.countTaxonomyTerms(filtered || []);
+            var message = 'Таксономия «' + (taxonomy.name || taxonomy.handle) + '»: ' + total + ' терминов.';
+            if (visible !== total) {
+                message += ' Отфильтровано: ' + visible + '.';
+            }
+
+            $summary.text(message);
+        },
+
+        showTaxonomyFeedback: function ($container, message, type) {
+            var $feedback = $container.find('[data-role="terms-feedback"]');
+            if (!$feedback.length) {
+                return;
+            }
+
+            $feedback.removeClass('text-success text-danger');
+            if (type === 'success') {
+                $feedback.addClass('text-success');
+            } else if (type === 'error') {
+                $feedback.addClass('text-danger');
+            }
+
+            $feedback.text(message || '');
+        },
+
+        findTaxonomyByHandle: function (handle) {
+            var dataset = this.taxonomyDataset || [];
+            var target = String(handle || '');
+            if (!target) {
+                return null;
+            }
+
+            var found = null;
+            $.each(dataset, function (_, taxonomy) {
+                if (taxonomy && String(taxonomy.handle || '') === target) {
+                    found = taxonomy;
+                    return false;
+                }
+
+                return true;
+            });
+
+            return found;
+        },
+
+        loadTaxonomyHandle: function () {
+            if (!window.localStorage) {
+                return '';
+            }
+
+            try {
+                return window.localStorage.getItem(this.taxonomyStorageKey) || '';
+            } catch (error) {
+                return '';
+            }
+        },
+
+        persistTaxonomyHandle: function (handle) {
+            if (!window.localStorage) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(this.taxonomyStorageKey, String(handle || ''));
+            } catch (error) {
+                // ignore storage errors
+            }
         },
 
         bindBulkActions: function () {

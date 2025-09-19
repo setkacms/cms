@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use yii\helpers\Html;
+use yii\helpers\Url;
 
 /* @var $this yii\web\View */
 
@@ -29,54 +30,83 @@ $this->params['breadcrumbs'][] = $this->title;
         </div>
     </div>
     <div class="box-body">
-        <div class="row margin-bottom">
-            <div class="col-sm-8">
-                <form class="form-inline" role="search" data-role="collections-filters">
-                    <div class="form-group">
+        <div class="row margin-bottom" data-role="collections-filters">
+            <div class="col-md-8">
+                <div class="form-inline">
+                    <div class="form-group" style="margin-right: 8px;">
                         <label class="sr-only" for="collections-search">Поиск</label>
-                        <input type="search" class="form-control input-sm" id="collections-search" placeholder="Поиск по названию">
+                        <input type="search" class="form-control input-sm" id="collections-search" placeholder="Поиск по названию или слагу">
                     </div>
-                    <div class="form-group">
+                    <div class="form-group" style="margin-right: 8px;">
                         <label class="sr-only" for="collections-status">Статус</label>
-                        <select id="collections-status" class="form-control input-sm select2" style="min-width: 160px;">
+                        <select id="collections-status" class="form-control input-sm select2" style="min-width: 180px;">
                             <option value="">Все статусы</option>
                             <option value="published">Опубликовано</option>
                             <option value="draft">Черновик</option>
                             <option value="archived">Архив</option>
                         </select>
                     </div>
+                    <div class="form-group" style="margin-right: 8px;">
+                        <label class="sr-only" for="collections-structure">Структура</label>
+                        <select id="collections-structure" class="form-control input-sm select2" style="min-width: 180px;">
+                            <option value="">Все структуры</option>
+                            <option value="flat">Плоская</option>
+                            <option value="tree">Древовидная</option>
+                            <option value="calendar">Календарь</option>
+                            <option value="sequence">Последовательность</option>
+                        </select>
+                    </div>
                     <button type="button" class="btn btn-default btn-sm" data-action="reset-filters">
                         <i class="fa fa-times"></i>
                     </button>
-                </form>
+                </div>
             </div>
-            <div class="col-sm-4 text-right">
-                <div class="btn-group btn-group-sm">
-                    <button type="button" class="btn btn-default" data-toggle="modal" data-target="#collections-columns">
-                        <i class="fa fa-table"></i> Колонки
-                    </button>
-                    <button type="button" class="btn btn-default" data-action="save-view">
+            <div class="col-md-4 text-right">
+                <div class="form-inline text-right">
+                    <div class="form-group" style="margin-right: 8px; min-width: 180px;">
+                        <label class="sr-only" for="collections-saved-view">Saved View</label>
+                        <select id="collections-saved-view" class="form-control input-sm select2" data-role="collections-saved-view" data-placeholder="Saved View">
+                            <option value="">Текущий фильтр</option>
+                        </select>
+                    </div>
+                    <button type="button" class="btn btn-default btn-sm" data-action="save-current-view" style="margin-right: 8px;">
                         <i class="fa fa-bookmark"></i> Сохранить вид
+                    </button>
+                    <button type="button" class="btn btn-default btn-sm" data-toggle="modal" data-target="#collections-columns">
+                        <i class="fa fa-table"></i> Колонки
                     </button>
                 </div>
             </div>
         </div>
+        <div class="clearfix margin-bottom collections-action-bar" data-role="collections-action-bar">
+            <div class="pull-left text-muted" data-role="collections-selection-summary">Коллекции не выбраны</div>
+            <div class="pull-right btn-group btn-group-sm">
+                <button type="button" class="btn btn-default" data-action="collection-open" data-requires-selection disabled>
+                    <i class="fa fa-external-link"></i> Открыть записи
+                </button>
+                <button type="button" class="btn btn-default" data-action="collection-edit" data-requires-selection disabled>
+                    <i class="fa fa-cog"></i> Настройки
+                </button>
+            </div>
+        </div>
         <div class="table-responsive">
-            <table class="table table-striped table-hover" data-role="collections-table">
+            <table id="collections-table" class="table table-striped table-hover" data-role="collections-table" data-endpoint="<?= Url::to(['data']) ?>">
                 <thead>
                 <tr>
                     <th class="text-center" style="width: 40px;">
                         <input type="checkbox" data-role="select-all">
                     </th>
                     <th>Название</th>
-                    <th class="hidden-xs">Слаг</th>
-                    <th class="hidden-xs">Элементов</th>
-                    <th class="hidden-xs" style="width: 160px;">Обновлено</th>
+                    <th>Слаг</th>
+                    <th>Структура</th>
+                    <th class="text-right">Элементов</th>
+                    <th>Статус</th>
+                    <th style="width: 160px;">Обновлено</th>
                 </tr>
                 </thead>
                 <tbody>
                 <tr class="empty">
-                    <td colspan="5" class="text-center text-muted">Данные появятся после подключения хранилища.</td>
+                    <td colspan="7" class="text-center text-muted">Загрузка коллекций…</td>
                 </tr>
                 </tbody>
             </table>
@@ -96,6 +126,8 @@ $this->params['breadcrumbs'][] = $this->title;
                 <i class="fa fa-play"></i> Применить
             </button>
         </div>
+        <div class="clearfix"></div>
+        <p class="help-block" data-role="collections-bulk-feedback"></p>
     </div>
 </div>
 

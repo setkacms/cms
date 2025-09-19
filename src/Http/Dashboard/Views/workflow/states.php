@@ -19,10 +19,20 @@ $this->params['breadcrumbs'][] = $this->title;
         </div>
     </div>
     <div class="box-body">
+        <p class="text-muted small">Перетащите статусы, чтобы изменить порядок переходов.</p>
         <div class="list-group" data-role="states-list">
-            <a href="#" class="list-group-item">Черновик</a>
-            <a href="#" class="list-group-item">На ревью</a>
-            <a href="#" class="list-group-item">Опубликовано</a>
+            <a href="#" class="list-group-item">
+                <span class="state-handle"><i class="fa fa-bars"></i></span>
+                Черновик
+            </a>
+            <a href="#" class="list-group-item">
+                <span class="state-handle"><i class="fa fa-bars"></i></span>
+                На ревью
+            </a>
+            <a href="#" class="list-group-item">
+                <span class="state-handle"><i class="fa fa-bars"></i></span>
+                Опубликовано
+            </a>
         </div>
     </div>
 </div>

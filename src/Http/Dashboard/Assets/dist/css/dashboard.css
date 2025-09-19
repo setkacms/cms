@@ -40,3 +40,28 @@ h1, h2, h3, h4, h5, h6 {
 #bulk-action-result {
   padding-top: 8px;
 }
+
+[data-role="media-dropzone"] {
+  border: 2px dashed #d2d6de;
+  background-color: #f9f9f9;
+  padding: 20px;
+  text-align: center;
+}
+
+[data-role="media-dropzone"] .dz-message {
+  font-size: 14px;
+  color: #9e9e9e;
+}
+
+[data-role="states-list"] .list-group-item {
+  cursor: move;
+}
+
+.state-handle {
+  margin-right: 8px;
+  color: #9e9e9e;
+}
+
+.workflow-state-ghost {
+  background-color: #ecf5ff !important;
+}

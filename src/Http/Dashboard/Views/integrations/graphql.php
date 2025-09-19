@@ -20,6 +20,12 @@ $this->params['breadcrumbs'][] = $this->title;
     </div>
     <div class="box-body">
         <p class="text-muted">Схема GraphQL будет сгенерирована автоматически. Здесь появится интерактивный Playground.</p>
-        <pre class="pre-scrollable" data-role="graphql-schema"># Schema preview will be available soon.</pre>
+        <textarea
+            class="form-control"
+            rows="12"
+            readonly
+            data-role="code-editor"
+            data-mode="javascript"
+        ># Schema preview will be available soon.</textarea>
     </div>
 </div>

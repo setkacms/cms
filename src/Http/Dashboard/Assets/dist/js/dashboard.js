@@ -7,6 +7,11 @@
         init: function () {
             this.initSelect2();
             this.initDataTables();
+            this.initFlatpickr();
+            this.initDropzone();
+            this.initSortable();
+            this.initTinyMCE();
+            this.initCodeMirror();
             this.bindSelectAll();
             this.bindFiltering();
             this.bindBulkActions();
@@ -77,6 +82,130 @@
             if (firstRow.length) {
                 self.selectRow(firstRow);
             }
+        },
+
+        initFlatpickr: function () {
+            if (typeof window.flatpickr === 'undefined') {
+                return;
+            }
+
+            var selectors = '[data-role="filter-date-from"], [data-role="filter-date-to"]';
+
+            $(selectors).each(function () {
+                if (this._flatpickr) {
+                    return;
+                }
+
+                window.flatpickr(this, {
+                    dateFormat: 'd.m.Y',
+                    altInput: true,
+                    altFormat: 'd.m.Y',
+                    allowInput: true
+                });
+            });
+        },
+
+        initDropzone: function () {
+            if (typeof window.Dropzone === 'undefined') {
+                return;
+            }
+
+            if (window.Dropzone.autoDiscover) {
+                window.Dropzone.autoDiscover = false;
+            }
+
+            $('[data-role="media-dropzone"]').each(function () {
+                var element = this;
+
+                if (element.dropzone) {
+                    return;
+                }
+
+                var options = {
+                    url: $(element).data('upload-url') || '#',
+                    autoProcessQueue: false,
+                    addRemoveLinks: true,
+                    dictDefaultMessage: 'Перетащите файлы сюда или нажмите для выбора.'
+                };
+
+                var dropzone = new window.Dropzone(element, options);
+                $(element).data('dropzone', dropzone);
+            });
+        },
+
+        initSortable: function () {
+            if (typeof window.Sortable === 'undefined') {
+                return;
+            }
+
+            $('[data-role="states-list"]').each(function () {
+                var element = this;
+
+                if (element._sortableInstance) {
+                    return;
+                }
+
+                element._sortableInstance = window.Sortable.create(element, {
+                    animation: 150,
+                    ghostClass: 'workflow-state-ghost',
+                    onEnd: function () {
+                        $(element).trigger('states:reordered');
+                    }
+                });
+            });
+        },
+
+        initTinyMCE: function () {
+            if (typeof window.tinymce === 'undefined') {
+                return;
+            }
+
+            var selector = '#element-content';
+            var $textarea = $(selector);
+
+            if (!$textarea.length) {
+                return;
+            }
+
+            if (window.tinymce.get($textarea.attr('id'))) {
+                return;
+            }
+
+            window.tinymce.init({
+                selector: selector,
+                height: 360,
+                menubar: false,
+                branding: false,
+                plugins: 'link lists code',
+                toolbar: 'undo redo | bold italic underline | bullist numlist | link | code',
+                setup: function (editor) {
+                    editor.on('change keyup', function () {
+                        editor.save();
+                    });
+                }
+            });
+        },
+
+        initCodeMirror: function () {
+            if (typeof window.CodeMirror === 'undefined') {
+                return;
+            }
+
+            $('[data-role="code-editor"]').each(function () {
+                var textarea = this;
+
+                if ($(textarea).data('codemirrorInstance')) {
+                    return;
+                }
+
+                var editor = window.CodeMirror.fromTextArea(textarea, {
+                    mode: $(textarea).data('mode') || 'javascript',
+                    lineNumbers: true,
+                    readOnly: $(textarea).is('[readonly]') ? 'nocursor' : false
+                });
+
+                $(textarea).data('codemirrorInstance', editor);
+            });
         },
 
         selectRow: function ($row) {

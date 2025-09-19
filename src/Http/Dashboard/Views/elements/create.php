@@ -82,8 +82,21 @@ $this->params['breadcrumbs'][] = $this->title;
                             <button type="button" class="btn btn-box-tool" data-action="attach-media"><i class="fa fa-plus"></i></button>
                         </div>
                     </div>
-                    <div class="box-body text-muted small">
-                        Подключите изображения и документы из медиатеки.
+                    <div class="box-body">
+                        <form
+                            action="#"
+                            method="post"
+                            class="dropzone"
+                            enctype="multipart/form-data"
+                            data-role="media-dropzone"
+                        >
+                            <div class="dz-message">
+                                Перетащите файлы сюда или нажмите для загрузки превью и вложений.
+                            </div>
+                        </form>
+                        <p class="help-block text-muted small">
+                            Загрузка демонстрационная: файлы не отправляются на сервер, но область Dropzone уже доступна для интеграции.
+                        </p>
                     </div>
                 </div>
             </div>

@@ -10,3 +10,33 @@
 h1, h2, h3, h4, h5, h6 {
   font-family: 'PT Root UI', 'Source Sans Pro', 'Helvetica Neue', Helvetica, Arial, sans-serif;
 }
+
+.dashboard-warning-list .dashboard-warning-message {
+  margin-left: 8px;
+  display: inline-block;
+  max-width: calc(100% - 120px);
+}
+
+.dashboard-quick-actions .info-box {
+  min-height: 120px;
+}
+
+.dashboard-quick-action-link {
+  margin-top: 12px;
+}
+
+[data-role="activity-panel"] table tbody tr.dashboard-activity-selected {
+  background-color: #f0f7ff;
+}
+
+#activity-preview {
+  min-height: 260px;
+}
+
+#activity-preview .dashboard-preview-description {
+  min-height: 60px;
+}
+
+#bulk-action-result {
+  padding-top: 8px;
+}

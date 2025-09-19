@@ -22,4 +22,25 @@ final class CollectionsController extends Controller
     {
         return $this->render('create');
     }
+
+    public function actionEntries(?string $handle = null): string
+    {
+        return $this->render('entries', [
+            'handle' => $handle,
+        ]);
+    }
+
+    public function actionSavedViews(?string $handle = null): string
+    {
+        return $this->render('saved-views', [
+            'handle' => $handle,
+        ]);
+    }
+
+    public function actionSettings(?string $handle = null): string
+    {
+        return $this->render('settings', [
+            'handle' => $handle,
+        ]);
+    }
 }

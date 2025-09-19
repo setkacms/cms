@@ -6,6 +6,31 @@ $requestedRoute = Yii::$app->requestedRoute ?? '';
 $equalsRoute = static fn(string $route): bool => $requestedRoute === ltrim($route, '/');
 $inSection = static fn(string $prefix): bool => str_starts_with($requestedRoute, ltrim($prefix, '/'));
 $caret = '<i class="fa fa-angle-left pull-right"></i>';
+$matchesAnyRoute = static function (array $routes) use ($equalsRoute): bool {
+    foreach ($routes as $route) {
+        if ($equalsRoute($route)) {
+            return true;
+        }
+    }
+
+    return false;
+};
+
+$collectionDetailActive = $matchesAnyRoute([
+    'dashboard/collections/entries',
+    'dashboard/collections/saved-views',
+    'dashboard/collections/settings',
+]);
+
+$workflowManagementActive = $matchesAnyRoute([
+    'dashboard/workflow/states',
+    'dashboard/workflow/transitions',
+]);
+
+$systemQueueActive = $matchesAnyRoute([
+    'dashboard/system/queue',
+    'dashboard/system/jobs',
+]);
 
 $menuItems = [
     '<li class="header">Главное</li>',
@@ -21,14 +46,32 @@ $menuItems = [
         'options' => ['class' => 'treeview'],
         'items' => [
             [
-                'label' => '<i class="fa fa-list"></i> Все коллекции',
+                'label' => '<i class="fa fa-list-ul"></i> Список коллекций',
                 'url' => Url::to(['/dashboard/collections/index']),
                 'active' => $equalsRoute('dashboard/collections/index'),
             ],
             [
-                'label' => '<i class="fa fa-plus-circle"></i> Новая коллекция',
-                'url' => Url::to(['/dashboard/collections/create']),
-                'active' => $equalsRoute('dashboard/collections/create'),
+                'label' => '<i class="fa fa-folder"></i> <span>Коллекция: {handle}</span>' . $caret,
+                'url' => '#',
+                'options' => ['class' => 'treeview'],
+                'items' => [
+                    [
+                        'label' => '<i class="fa fa-file-text-o"></i> Записи',
+                        'url' => Url::to(['/dashboard/collections/entries']),
+                        'active' => $equalsRoute('dashboard/collections/entries'),
+                    ],
+                    [
+                        'label' => '<i class="fa fa-eye"></i> Saved Views',
+                        'url' => Url::to(['/dashboard/collections/saved-views']),
+                        'active' => $equalsRoute('dashboard/collections/saved-views'),
+                    ],
+                    [
+                        'label' => '<i class="fa fa-sliders"></i> Настройки коллекции',
+                        'url' => Url::to(['/dashboard/collections/settings']),
+                        'active' => $equalsRoute('dashboard/collections/settings'),
+                    ],
+                ],
+                'active' => $collectionDetailActive,
             ],
         ],
         'active' => $inSection('dashboard/collections'),
@@ -165,7 +208,7 @@ $menuItems = [
     ],
     '<li class="header">Расширения</li>',
     [
-        'label' => '<i class="fa fa-plug"></i> <span>Плагины</span>' . $caret,
+        'label' => '<i class="fa fa-puzzle-piece"></i> <span>Плагины</span>' . $caret,
         'url' => Url::to(['/dashboard/plugins/index']),
         'options' => ['class' => 'treeview'],
         'items' => [
@@ -188,7 +231,7 @@ $menuItems = [
         'active' => $inSection('dashboard/plugins'),
     ],
     [
-        'label' => '<i class="fa fa-exchange"></i> <span>Интеграции</span>' . $caret,
+        'label' => '<i class="fa fa-plug"></i> <span>Интеграции</span>' . $caret,
         'url' => Url::to(['/dashboard/integrations/index']),
         'options' => ['class' => 'treeview'],
         'items' => [
@@ -198,7 +241,7 @@ $menuItems = [
                 'active' => $equalsRoute('dashboard/integrations/rest'),
             ],
             [
-                'label' => '<i class="fa fa-code"></i> GraphQL',
+                'label' => '<i class="fa fa-code-fork"></i> GraphQL',
                 'url' => Url::to(['/dashboard/integrations/graphql']),
                 'active' => $equalsRoute('dashboard/integrations/graphql'),
             ],
@@ -217,9 +260,40 @@ $menuItems = [
         'active' => $inSection('dashboard/localization'),
     ],
     [
-        'label' => '<i class="fa fa-random"></i> <span>Воркфлоу</span>',
+        'label' => '<i class="fa fa-random"></i> <span>Workflow</span>' . $caret,
         'url' => Url::to(['/dashboard/workflow/index']),
+        'options' => ['class' => 'treeview'],
+        'items' => [
+            [
+                'label' => '<i class="fa fa-check-square-o"></i> Задачи на ревью',
+                'url' => Url::to(['/dashboard/workflow/index']),
+                'active' => $equalsRoute('dashboard/workflow/index'),
+            ],
+            [
+                'label' => '<i class="fa fa-code-fork"></i> Версии и сравнения',
+                'url' => Url::to(['/dashboard/workflow/transitions']),
+                'active' => $workflowManagementActive,
+            ],
+        ],
         'active' => $inSection('dashboard/workflow'),
+    ],
+    [
+        'label' => '<i class="fa fa-search"></i> <span>Поиск</span>' . $caret,
+        'url' => Url::to(['/dashboard/search/index']),
+        'options' => ['class' => 'treeview'],
+        'items' => [
+            [
+                'label' => '<i class="fa fa-database"></i> Индексы',
+                'url' => Url::to(['/dashboard/search/index']),
+                'active' => $equalsRoute('dashboard/search/index'),
+            ],
+            [
+                'label' => '<i class="fa fa-refresh"></i> Перестроить',
+                'url' => Url::to(['/dashboard/search/rebuild']),
+                'active' => $equalsRoute('dashboard/search/rebuild'),
+            ],
+        ],
+        'active' => $inSection('dashboard/search'),
     ],
     '<li class="header">Система</li>',
     [
@@ -246,19 +320,27 @@ $menuItems = [
         'active' => $inSection('dashboard/settings'),
     ],
     [
-        'label' => '<i class="fa fa-list-ul"></i> <span>Журналы</span>',
-        'url' => Url::to(['/dashboard/system/logs']),
-        'active' => $inSection('dashboard/system/logs'),
-    ],
-    [
-        'label' => '<i class="fa fa-tasks"></i> <span>Очереди</span>',
+        'label' => '<i class="fa fa-server"></i> <span>Обслуживание</span>' . $caret,
         'url' => Url::to(['/dashboard/system/queue']),
-        'active' => $inSection('dashboard/system/queue'),
-    ],
-    [
-        'label' => '<i class="fa fa-server"></i> <span>Фоновые задачи</span>',
-        'url' => Url::to(['/dashboard/system/jobs']),
-        'active' => $inSection('dashboard/system/jobs'),
+        'options' => ['class' => 'treeview'],
+        'items' => [
+            [
+                'label' => '<i class="fa fa-tasks"></i> Очереди и задания',
+                'url' => Url::to(['/dashboard/system/queue']),
+                'active' => $systemQueueActive,
+            ],
+            [
+                'label' => '<i class="fa fa-eraser"></i> Кэш и очистка',
+                'url' => Url::to(['/dashboard/system/cache']),
+                'active' => $equalsRoute('dashboard/system/cache'),
+            ],
+            [
+                'label' => '<i class="fa fa-list-ul"></i> Логи и аудит',
+                'url' => Url::to(['/dashboard/system/logs']),
+                'active' => $equalsRoute('dashboard/system/logs'),
+            ],
+        ],
+        'active' => $inSection('dashboard/system'),
     ],
 ];
 

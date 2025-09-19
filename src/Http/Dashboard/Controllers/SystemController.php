@@ -27,4 +27,9 @@ final class SystemController extends Controller
     {
         return $this->render('jobs');
     }
+
+    public function actionCache(): string
+    {
+        return $this->render('cache');
+    }
 }

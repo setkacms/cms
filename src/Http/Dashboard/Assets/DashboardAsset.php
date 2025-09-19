@@ -71,12 +71,14 @@ class DashboardAsset extends AssetBundle
             [\dmstr\web\AdminLteAsset::class]
         );
 
-        AdminLtePlugin::register(
-            $view,
-            'tinymce',
-            ['skins/lightgray/skin.min.css'],
-            ['tinymce.min.js'],
-            [\dmstr\web\AdminLteAsset::class]
+        $view->registerCssFile(
+            'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.snow.css',
+            ['depends' => [\dmstr\web\AdminLteAsset::class]]
+        );
+
+        $view->registerJsFile(
+            'https://cdn.jsdelivr.net/npm/quill@1.3.7/dist/quill.min.js',
+            ['depends' => [\dmstr\web\AdminLteAsset::class]]
         );
 
         AdminLtePlugin::register(

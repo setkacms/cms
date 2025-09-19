@@ -15,6 +15,8 @@
         collectionEntriesCurrentViewId: null,
         isApplyingCollectionEntriesView: false,
         collectionEntriesCurrentNodeId: '',
+        matrixInstances: [],
+        matrixBlockUid: 0,
 
         init: function () {
             this.initSelect2();
@@ -22,7 +24,7 @@
             this.initFlatpickr();
             this.initDropzone();
             this.initSortable();
-            this.initTinyMCE();
+            this.initMatrixRepeater();
             this.initCodeMirror();
             this.bindSelectAll();
             this.bindFiltering();
@@ -178,35 +180,357 @@
             });
         },
 
-        initTinyMCE: function () {
-            if (typeof window.tinymce === 'undefined') {
-                return;
-            }
+        initMatrixRepeater: function () {
+            var self = this;
 
-            var selector = '#element-content';
-            var $textarea = $(selector);
+            $('[data-role="matrix"]').each(function () {
+                var $matrix = $(this);
 
-            if (!$textarea.length) {
-                return;
-            }
+                if ($matrix.data('matrixInitialized')) {
+                    return;
+                }
 
-            if (window.tinymce.get($textarea.attr('id'))) {
-                return;
-            }
+                $matrix.data('matrixInitialized', true);
 
-            window.tinymce.init({
-                selector: selector,
-                height: 360,
-                menubar: false,
-                branding: false,
-                plugins: 'link lists code',
-                toolbar: 'undo redo | bold italic underline | bullist numlist | link | code',
-                setup: function (editor) {
-                    editor.on('change keyup', function () {
-                        editor.save();
+                var instance = {
+                    $matrix: $matrix,
+                    $blocks: $matrix.find('[data-role="matrix-blocks"]').first(),
+                    $storage: $matrix.find('[data-role="matrix-storage"]').first(),
+                    $empty: $matrix.find('[data-role="matrix-empty"]').first(),
+                    sortable: null
+                };
+
+                if (!instance.$blocks.length) {
+                    instance.$blocks = $('<div data-role="matrix-blocks"></div>').appendTo($matrix);
+                }
+
+                self.matrixInstances.push(instance);
+
+                $matrix.on('click', '[data-role="matrix-add"]', function (event) {
+                    event.preventDefault();
+                    var type = $(this).attr('data-block-type') || 'text';
+                    self.addMatrixBlock(instance, type);
+                });
+
+                $matrix.on('click', '[data-role="matrix-remove"]', function (event) {
+                    event.preventDefault();
+                    var $block = $(this).closest('[data-role="matrix-block"]');
+                    if (!$block.length) {
+                        return;
+                    }
+
+                    self.removeMatrixBlock(instance, $block);
+                });
+
+                instance.$blocks.children('[data-role="matrix-block"]').each(function () {
+                    self.initMatrixBlock(instance, $(this));
+                });
+
+                var initialBlocks = [];
+                if (instance.$storage.length) {
+                    var storedValue = instance.$storage.val();
+                    if (storedValue) {
+                        try {
+                            initialBlocks = JSON.parse(storedValue) || [];
+                        } catch (error) {
+                            initialBlocks = [];
+                            if (window.console && window.console.warn) {
+                                window.console.warn('Невозможно прочитать данные матрицы', error);
+                            }
+                        }
+                    }
+                }
+
+                if (initialBlocks.length) {
+                    instance.$blocks.empty();
+                    initialBlocks.forEach(function (blockData) {
+                        self.addMatrixBlock(instance, blockData.type || 'text', blockData, true);
                     });
                 }
+
+                self.createMatrixSortable(instance);
+                self.updateMatrixEmptyState(instance);
+                self.syncMatrix(instance);
             });
+        },
+
+        addMatrixBlock: function (instance, type, data, skipSync) {
+            if (!instance || !instance.$blocks || !instance.$blocks.length) {
+                return null;
+            }
+
+            var template = this.getMatrixTemplate(instance.$matrix, type);
+            if (!template) {
+                return null;
+            }
+
+            var $block;
+
+            if (template.content) {
+                var fragment = document.importNode(template.content, true);
+                var $wrapper = $('<div></div>').append(fragment);
+                $block = $wrapper.children('[data-role="matrix-block"]').first();
+
+                if (!$block.length) {
+                    $block = $wrapper.children().first();
+                }
+            } else {
+                var html = $(template).html() || '';
+                $block = $(html.trim());
+
+                if ($block.length > 1) {
+                    $block = $block.filter('[data-role="matrix-block"]').first() || $block.first();
+                }
+            }
+
+            if (!$block || !$block.length) {
+                return null;
+            }
+
+            instance.$blocks.append($block);
+            this.initMatrixBlock(instance, $block, data || {});
+            this.updateMatrixEmptyState(instance);
+
+            if (!skipSync) {
+                this.syncMatrix(instance);
+            }
+
+            return $block;
+        },
+
+        initMatrixBlock: function (instance, $block, data) {
+            if (!$block || !$block.length) {
+                return;
+            }
+
+            if ($block.data('matrixInitialized')) {
+                return;
+            }
+
+            $block.data('matrixInitialized', true);
+
+            var self = this;
+            var blockData = data || {};
+            var type = blockData.type || $block.attr('data-block-type') || $block.data('blockType') || 'text';
+
+            $block.attr('data-block-type', type);
+            $block.data('blockType', type);
+            $block.attr('data-matrix-uid', ++this.matrixBlockUid);
+
+            var $typeInput = $block.find('[data-role="matrix-block-type"]').first();
+            if ($typeInput.length) {
+                $typeInput.val(type);
+            }
+
+            var $valueInput = $block.find('[data-role="matrix-block-value"]').first();
+            if (!blockData.content && $valueInput.length && $valueInput.val()) {
+                blockData.content = $valueInput.val();
+            }
+
+            var $editor = $block.find('[data-role="matrix-editor"]').first();
+            if ($editor.length) {
+                var quillOptions = $.extend(true, {}, self.getDefaultQuillOptions());
+                var quillInstance = null;
+                var changeHandler = null;
+
+                if (typeof window.Quill !== 'undefined') {
+                    quillInstance = new window.Quill($editor.get(0), quillOptions);
+
+                    if (blockData.content) {
+                        quillInstance.clipboard.dangerouslyPasteHTML(blockData.content);
+                    }
+
+                    changeHandler = function () {
+                        self.syncMatrix(instance);
+                    };
+
+                    quillInstance.on('text-change', changeHandler);
+                    $block.data('matrixQuill', quillInstance);
+                    $block.data('matrixQuillChangeHandler', changeHandler);
+                } else {
+                    $editor.attr('contenteditable', 'true');
+
+                    if (blockData.content) {
+                        $editor.html(blockData.content);
+                    }
+
+                    var fallbackHandler = function () {
+                        self.syncMatrix(instance);
+                    };
+
+                    $editor.on('input', fallbackHandler);
+                    $block.data('matrixFallbackHandler', fallbackHandler);
+                }
+            }
+
+            if ($valueInput.length && blockData.content) {
+                $valueInput.val(blockData.content);
+            }
+
+            $block.trigger('matrix:block-initialized', [blockData, instance]);
+        },
+
+        removeMatrixBlock: function (instance, $block) {
+            if (!$block || !$block.length) {
+                return;
+            }
+
+            var quillInstance = $block.data('matrixQuill');
+            var changeHandler = $block.data('matrixQuillChangeHandler');
+
+            if (quillInstance && typeof quillInstance.off === 'function' && changeHandler) {
+                quillInstance.off('text-change', changeHandler);
+            }
+
+            var fallbackHandler = $block.data('matrixFallbackHandler');
+            var $editor = $block.find('[data-role="matrix-editor"]').first();
+            if (fallbackHandler && $editor.length) {
+                $editor.off('input', fallbackHandler);
+            }
+
+            $block.remove();
+            this.updateMatrixEmptyState(instance);
+            this.syncMatrix(instance);
+        },
+
+        updateMatrixEmptyState: function (instance) {
+            if (!instance || !instance.$empty || !instance.$empty.length) {
+                return;
+            }
+
+            var hasBlocks = instance.$blocks && instance.$blocks.children('[data-role="matrix-block"]').length > 0;
+            instance.$empty.toggle(!hasBlocks);
+        },
+
+        syncMatrix: function (instance) {
+            if (!instance || !instance.$blocks) {
+                return;
+            }
+
+            var blocksData = [];
+
+            instance.$blocks.children('[data-role="matrix-block"]').each(function (index) {
+                var $block = $(this);
+                var type = $block.data('blockType') || $block.attr('data-block-type') || 'text';
+                var quillInstance = $block.data('matrixQuill');
+                var content = '';
+
+                if (quillInstance) {
+                    content = quillInstance.root.innerHTML;
+                } else {
+                    var $valueInput = $block.find('[data-role="matrix-block-value"]').first();
+                    if ($valueInput.length) {
+                        content = $valueInput.val();
+                    } else {
+                        var $quillEditor = $block.find('.ql-editor').first();
+                        if ($quillEditor.length) {
+                            content = $quillEditor.html();
+                        } else {
+                            var $rawEditor = $block.find('[data-role="matrix-editor"]').first();
+                            if ($rawEditor.length) {
+                                content = $rawEditor.html();
+                            }
+                        }
+                    }
+                }
+
+                blocksData.push({ type: type, content: content });
+
+                var $typeInput = $block.find('[data-role="matrix-block-type"]').first();
+                if ($typeInput.length) {
+                    $typeInput.val(type).attr('name', 'matrix[' + index + '][type]');
+                }
+
+                var $valueInput = $block.find('[data-role="matrix-block-value"]').first();
+                if ($valueInput.length) {
+                    $valueInput.val(content).attr('name', 'matrix[' + index + '][content]');
+                }
+            });
+
+            if (instance.$storage && instance.$storage.length) {
+                var serialized = '';
+                if (blocksData.length) {
+                    try {
+                        serialized = JSON.stringify(blocksData);
+                    } catch (error) {
+                        serialized = '';
+                        if (window.console && window.console.warn) {
+                            window.console.warn('Ошибка сериализации данных матрицы', error);
+                        }
+                    }
+                }
+
+                instance.$storage.val(serialized).trigger('change');
+            }
+
+            instance.$matrix.toggleClass('matrix--filled', blocksData.length > 0);
+            instance.$matrix.trigger('matrix:change', [blocksData]);
+        },
+
+        createMatrixSortable: function (instance) {
+            if (!instance || !instance.$blocks || !instance.$blocks.length) {
+                return;
+            }
+
+            if (typeof window.Sortable === 'undefined') {
+                return;
+            }
+
+            var element = instance.$blocks.get(0);
+            if (!element) {
+                return;
+            }
+
+            if (element._matrixSortableInstance) {
+                return;
+            }
+
+            var self = this;
+            element._matrixSortableInstance = window.Sortable.create(element, {
+                animation: 150,
+                handle: '[data-role="matrix-handle"]',
+                ghostClass: 'matrix-block--ghost',
+                dragClass: 'matrix-block--drag',
+                onEnd: function () {
+                    self.syncMatrix(instance);
+                }
+            });
+
+            instance.sortable = element._matrixSortableInstance;
+        },
+
+        getMatrixTemplate: function ($matrix, type) {
+            if (!$matrix || !$matrix.length) {
+                return null;
+            }
+
+            var template = null;
+
+            if (type) {
+                template = $matrix.find('[data-role="matrix-template"][data-block-type="' + type + '"]').get(0);
+            }
+
+            if (!template) {
+                template = $matrix.find('[data-role="matrix-template"]').get(0) || null;
+            }
+
+            return template;
+        },
+
+        getDefaultQuillOptions: function () {
+            return {
+                theme: 'snow',
+                modules: {
+                    toolbar: [
+                        ['bold', 'italic', 'underline', 'strike'],
+                        [{ header: [1, 2, 3, false] }],
+                        [{ list: 'ordered' }, { list: 'bullet' }],
+                        ['blockquote', 'code-block'],
+                        ['link'],
+                        ['clean']
+                    ]
+                }
+            };
         },
 
         initCodeMirror: function () {

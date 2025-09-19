@@ -8,6 +8,14 @@
         collectionSavedViews: [],
         currentSavedViewId: null,
         isApplyingSavedView: false,
+        schemasDataset: [],
+        schemasDefaultSavedViews: [],
+        schemasSavedViews: [],
+        schemasCurrentViewId: null,
+        schemasCurrentSelectionId: null,
+        schemasSelectFirstAfterRender: false,
+        schemasStorageKey: 'dashboard.schemas.savedViews',
+        isApplyingSchemasView: false,
         collectionEntriesTable: null,
         collectionEntriesSelection: {},
         collectionEntriesSavedViews: [],
@@ -61,6 +69,7 @@
             this.bindCollectionsFilters();
             this.bindCollectionsBulkActions();
             this.initCollectionsSavedViews();
+            this.initSchemasModule();
             this.bindCollectionsActionBar();
             this.initCollectionEntriesModule();
             this.initRelationsModule();
@@ -1067,6 +1076,767 @@
             }
 
             return null;
+        },
+
+        initSchemasModule: function () {
+            var $container = $('[data-role="schemas"]');
+            if (!$container.length) {
+                return;
+            }
+
+            this.schemasDataset = this.readSchemasDatasetFromDom();
+            this.schemasDefaultSavedViews = this.readSchemasDefaultSavedViewsFromDom();
+            this.schemasSavedViews = this.loadSchemasSavedViews();
+            this.schemasCurrentViewId = null;
+            this.schemasCurrentSelectionId = null;
+            this.schemasSelectFirstAfterRender = false;
+            this.isApplyingSchemasView = false;
+
+            this.renderSchemasCollectionFilterOptions();
+            this.bindSchemasTableEvents();
+            this.bindSchemasFilters();
+            this.initSchemasSavedViews();
+            this.renderSchemasTable();
+        },
+
+        readSchemasDatasetFromDom: function () {
+            var $script = $('[data-role="schemas-dataset"]');
+            if (!$script.length) {
+                return [];
+            }
+
+            try {
+                var raw = $script.text() || '[]';
+                var parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+
+                return parsed
+                    .filter(function (item) {
+                        return item && typeof item.id === 'string' && typeof item.name === 'string';
+                    })
+                    .map(function (item) {
+                        var copy = $.extend(true, {}, item);
+                        if (!Array.isArray(copy.fields)) {
+                            copy.fields = [];
+                        }
+                        return copy;
+                    });
+            } catch (error) {
+                console.warn('Не удалось разобрать набор схем', error);
+                return [];
+            }
+        },
+
+        readSchemasDefaultSavedViewsFromDom: function () {
+            var $script = $('[data-role="schemas-default-saved-views"]');
+            if (!$script.length) {
+                return [];
+            }
+
+            try {
+                var raw = $script.text() || '[]';
+                var parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+
+                return parsed.filter(function (item) {
+                    return item && typeof item.id === 'string' && typeof item.name === 'string' && item.filters;
+                });
+            } catch (error) {
+                console.warn('Не удалось разобрать предустановленные Saved Views схем', error);
+                return [];
+            }
+        },
+
+        bindSchemasTableEvents: function () {
+            var self = this;
+            var $table = $('[data-role="schemas-table"]');
+            if (!$table.length) {
+                return;
+            }
+
+            $table.on('click', 'tbody tr[data-schema-id]', function (event) {
+                if ($(event.target).is('a, button, input, label, select')) {
+                    return;
+                }
+
+                var id = String($(this).attr('data-schema-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                self.selectSchemaById(id);
+            });
+        },
+
+        renderSchemasCollectionFilterOptions: function () {
+            var $select = $('#schemas-collection');
+            if (!$select.length) {
+                return;
+            }
+
+            var previous = String($select.val() || '');
+            var options = ['<option value="">Все коллекции</option>'];
+            var seen = {};
+
+            for (var i = 0; i < this.schemasDataset.length; i++) {
+                var schema = this.schemasDataset[i];
+                if (!schema) {
+                    continue;
+                }
+
+                var collection = schema.collection || {};
+                var handle = String(collection.handle || '');
+                if (!handle || seen[handle]) {
+                    continue;
+                }
+
+                seen[handle] = true;
+                var label = collection.name || handle;
+                options.push('<option value="' + this.escapeHtml(handle) + '">' + this.escapeHtml(label) + '</option>');
+            }
+
+            $select.html(options.join(''));
+
+            if (previous && seen[previous]) {
+                $select.val(previous);
+            } else {
+                $select.val('');
+            }
+
+            if ($select.data('select2')) {
+                $select.trigger('change.select2');
+            }
+        },
+
+        getSchemaFilters: function () {
+            var $search = $('#schemas-search');
+            var $collection = $('#schemas-collection');
+
+            return {
+                search: $search.length ? String($search.val() || '').trim() : '',
+                collection: $collection.length ? String($collection.val() || '') : '',
+                selected: this.schemasCurrentSelectionId || '',
+                view: this.schemasCurrentViewId || ''
+            };
+        },
+
+        filterSchemasDataset: function (filters) {
+            var search = String(filters.search || '').toLowerCase();
+            var collection = String(filters.collection || '');
+
+            var items = [];
+
+            for (var i = 0; i < this.schemasDataset.length; i++) {
+                var schema = this.schemasDataset[i];
+                if (!schema) {
+                    continue;
+                }
+
+                if (collection) {
+                    var handle = schema.collection && schema.collection.handle ? String(schema.collection.handle) : '';
+                    if (handle !== collection) {
+                        continue;
+                    }
+                }
+
+                if (search) {
+                    var haystackParts = [];
+                    haystackParts.push(schema.name || '');
+                    if (schema.collection && schema.collection.name) {
+                        haystackParts.push(schema.collection.name);
+                    }
+                    if (Array.isArray(schema.tags)) {
+                        haystackParts = haystackParts.concat(schema.tags);
+                    }
+                    if (Array.isArray(schema.fields)) {
+                        for (var j = 0; j < schema.fields.length; j++) {
+                            var field = schema.fields[j] || {};
+                            if (field.name) {
+                                haystackParts.push(field.name);
+                            }
+                            if (field.handle) {
+                                haystackParts.push(field.handle);
+                            }
+                            if (field.type) {
+                                haystackParts.push(field.type);
+                            }
+                        }
+                    }
+
+                    var haystack = haystackParts.join(' ').toLowerCase();
+                    if (haystack.indexOf(search) === -1) {
+                        continue;
+                    }
+                }
+
+                items.push(schema);
+            }
+
+            items.sort(function (a, b) {
+                var aTime = a && a.updatedIso ? Date.parse(a.updatedIso) : 0;
+                var bTime = b && b.updatedIso ? Date.parse(b.updatedIso) : 0;
+
+                if (isNaN(aTime)) {
+                    aTime = 0;
+                }
+                if (isNaN(bTime)) {
+                    bTime = 0;
+                }
+
+                if (aTime === bTime) {
+                    return (a.name || '').localeCompare(b.name || '', 'ru');
+                }
+
+                return bTime - aTime;
+            });
+
+            return items;
+        },
+
+        renderSchemasTable: function () {
+            var $table = $('[data-role="schemas-table"]');
+            if (!$table.length) {
+                return;
+            }
+
+            var filters = this.getSchemaFilters();
+            var items = this.filterSchemasDataset(filters);
+            var $tbody = $table.find('tbody');
+            $tbody.empty();
+
+            if (!items.length) {
+                $tbody.append('<tr class="empty"><td colspan="3" class="text-center text-muted">Подходящих схем не найдено.</td></tr>');
+            } else {
+                for (var i = 0; i < items.length; i++) {
+                    var schema = items[i];
+                    var collectionName = schema.collection && schema.collection.name ? schema.collection.name : '—';
+                    var updated = schema.updated || schema.updatedLabel || schema.updatedIso || '—';
+                    var rowHtml = '' +
+                        '<tr data-schema-id="' + this.escapeHtml(schema.id) + '">' +
+                        '<td>' + this.escapeHtml(schema.name || '—') + '</td>' +
+                        '<td class="hidden-xs">' + this.escapeHtml(collectionName) + '</td>' +
+                        '<td class="hidden-xs">' + this.escapeHtml(updated) + '</td>' +
+                        '</tr>';
+                    $tbody.append(rowHtml);
+                }
+            }
+
+            var selectionId = String(this.schemasCurrentSelectionId || '');
+            var hasSelection = selectionId && items.some(function (schema) {
+                return schema && schema.id === selectionId;
+            });
+
+            if (!hasSelection) {
+                if (this.schemasSelectFirstAfterRender && items.length) {
+                    this.schemasCurrentSelectionId = items[0].id;
+                } else {
+                    this.schemasCurrentSelectionId = '';
+                }
+            }
+
+            if (!items.length) {
+                this.schemasCurrentSelectionId = '';
+            }
+
+            this.schemasSelectFirstAfterRender = false;
+
+            this.highlightSchemasSelection();
+            this.updateSchemaPreview();
+        },
+
+        highlightSchemasSelection: function () {
+            var $table = $('[data-role="schemas-table"]');
+            if (!$table.length) {
+                return;
+            }
+
+            var $rows = $table.find('tbody tr');
+            $rows.removeClass('info');
+
+            var selectionId = String(this.schemasCurrentSelectionId || '');
+            if (!selectionId) {
+                return;
+            }
+
+            var selector = '[data-schema-id="' + selectionId.replace(/"/g, '\\"') + '"]';
+            $rows.filter(selector).addClass('info');
+        },
+
+        selectSchemaById: function (id) {
+            var schema = this.findSchemaById(id);
+            if (!schema) {
+                return;
+            }
+
+            this.schemasCurrentSelectionId = schema.id;
+            this.highlightSchemasSelection();
+            this.updateSchemaPreview();
+        },
+
+        findSchemaById: function (id) {
+            var needle = String(id || '');
+            if (!needle) {
+                return null;
+            }
+
+            for (var i = 0; i < this.schemasDataset.length; i++) {
+                if (this.schemasDataset[i] && this.schemasDataset[i].id === needle) {
+                    return this.schemasDataset[i];
+                }
+            }
+
+            return null;
+        },
+
+        updateSchemaPreview: function () {
+            var schema = this.findSchemaById(this.schemasCurrentSelectionId);
+            var $placeholder = $('[data-role="schema-preview-placeholder"]');
+            var $content = $('[data-role="schema-preview-content"]');
+            var $name = $('[data-role="schema-preview-name"]');
+            var $description = $('[data-role="schema-preview-description"]');
+            var $collection = $('[data-role="schema-preview-collection"]');
+            var $updated = $('[data-role="schema-preview-updated"]');
+            var $fieldsCount = $('[data-role="schema-preview-fields-count"]');
+            var $fields = $('[data-role="schema-fields"]');
+            var $editButton = $('[data-role="edit-schema"]');
+
+            if (!schema) {
+                if ($placeholder.length) {
+                    $placeholder.removeClass('hidden');
+                }
+                if ($content.length) {
+                    $content.addClass('hidden');
+                }
+                if ($fields.length) {
+                    $fields.empty().append('<li class="list-group-item text-muted">Поля будут показаны здесь.</li>');
+                }
+                if ($editButton.length) {
+                    $editButton.addClass('disabled').attr('href', '#').attr('aria-disabled', 'true');
+                }
+                return;
+            }
+
+            if ($placeholder.length) {
+                $placeholder.addClass('hidden');
+            }
+            if ($content.length) {
+                $content.removeClass('hidden');
+            }
+
+            if ($name.length) {
+                $name.text(schema.name || '—');
+            }
+
+            if ($description.length) {
+                var description = schema.description || '';
+                if (description) {
+                    $description.text(description).removeClass('hidden');
+                } else {
+                    $description.text('').addClass('hidden');
+                }
+            }
+
+            var collectionName = schema.collection && schema.collection.name ? schema.collection.name : '—';
+            if ($collection.length) {
+                $collection.text(collectionName);
+            }
+
+            var updatedLabel = schema.updated || schema.updatedLabel || schema.updatedIso || '—';
+            if ($updated.length) {
+                $updated.text(updatedLabel || '—');
+            }
+
+            if ($fieldsCount.length) {
+                var count = Array.isArray(schema.fields) ? schema.fields.length : 0;
+                $fieldsCount.text(count ? count : '—');
+            }
+
+            this.renderSchemaFields(schema, $fields);
+
+            if ($editButton.length) {
+                if (schema.editUrl) {
+                    $editButton.removeClass('disabled').attr('href', schema.editUrl).removeAttr('aria-disabled');
+                } else {
+                    $editButton.addClass('disabled').attr('href', '#').attr('aria-disabled', 'true');
+                }
+                $editButton.attr('data-schema-id', schema.id || '');
+            }
+        },
+
+        renderSchemaFields: function (schema, $container) {
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            $container.empty();
+
+            var fields = schema && Array.isArray(schema.fields) ? schema.fields : [];
+            if (!fields.length) {
+                $container.append('<li class="list-group-item text-muted">Поля будут показаны здесь.</li>');
+                return;
+            }
+
+            for (var i = 0; i < fields.length; i++) {
+                var field = fields[i] || {};
+                var name = field.name || 'Поле';
+                var handle = field.handle ? ' <span class="text-muted">@' + this.escapeHtml(String(field.handle)) + '</span>' : '';
+                var badges = [];
+
+                if (field.type) {
+                    badges.push('<span class="label label-default">' + this.escapeHtml(String(field.type)) + '</span>');
+                }
+                if (field.required) {
+                    badges.push('<span class="label label-warning">обязательное</span>');
+                }
+                if (field.localized) {
+                    badges.push('<span class="label label-info">локализация</span>');
+                }
+                if (field.multiple) {
+                    badges.push('<span class="label label-primary">множественное</span>');
+                }
+
+                var badgesHtml = badges.length ? '<span class="pull-right schema-field-badges">' + badges.join(' ') + '</span>' : '';
+                var description = field.description ? '<div class="text-muted small">' + this.escapeHtml(String(field.description)) + '</div>' : '';
+
+                var itemHtml = '<li class="list-group-item">' +
+                    '<div class="schema-field-header">' +
+                    '<strong>' + this.escapeHtml(String(name)) + '</strong>' +
+                    handle +
+                    badgesHtml +
+                    '</div>' +
+                    description +
+                    '</li>';
+
+                $container.append(itemHtml);
+            }
+        },
+
+        bindSchemasFilters: function () {
+            var self = this;
+            var $search = $('#schemas-search');
+            var $collection = $('#schemas-collection');
+
+            var debounceTimer = null;
+
+            if ($search.length) {
+                $search.on('input', function () {
+                    if (!self.isApplyingSchemasView) {
+                        self.clearSchemasSavedView();
+                    }
+
+                    window.clearTimeout(debounceTimer);
+                    debounceTimer = window.setTimeout(function () {
+                        self.renderSchemasTable();
+                    }, 250);
+                });
+            }
+
+            if ($collection.length) {
+                $collection.on('change', function () {
+                    if (!self.isApplyingSchemasView) {
+                        self.clearSchemasSavedView();
+                    }
+
+                    self.renderSchemasTable();
+                });
+            }
+
+            $(document).on('click', '[data-action="schemas-reset-filters"]', function (event) {
+                event.preventDefault();
+
+                if ($search.length) {
+                    $search.val('');
+                }
+
+                if ($collection.length) {
+                    $collection.val('');
+                    if ($collection.data('select2')) {
+                        $collection.trigger('change.select2');
+                    } else {
+                        $collection.trigger('change');
+                    }
+                }
+
+                self.clearSchemasSavedView();
+                self.renderSchemasTable();
+            });
+        },
+
+        clearSchemasSavedView: function () {
+            if (this.isApplyingSchemasView) {
+                return;
+            }
+
+            if (!this.schemasCurrentViewId) {
+                return;
+            }
+
+            this.schemasCurrentViewId = null;
+            var $select = $('[data-role="schemas-saved-view"]');
+            if ($select.length) {
+                $select.val('');
+                if ($select.data('select2')) {
+                    $select.trigger('change.select2');
+                }
+            }
+        },
+
+        initSchemasSavedViews: function () {
+            var $select = $('[data-role="schemas-saved-view"]');
+            if (!$select.length) {
+                return;
+            }
+
+            this.renderSchemasSavedViews();
+
+            var self = this;
+
+            $select.on('change', function () {
+                var id = String($(this).val() || '');
+                if (!id) {
+                    self.schemasCurrentViewId = null;
+                    return;
+                }
+
+                var view = self.findSchemasSavedView(id);
+                if (!view) {
+                    return;
+                }
+
+                self.schemasCurrentViewId = view.id;
+                self.applySchemasSavedView(view);
+            });
+
+            $(document).on('click', '[data-action="schemas-save-view"]', function (event) {
+                event.preventDefault();
+                self.createSchemasSavedView();
+            });
+
+            $(document).on('click', '[data-action="schemas-delete-view"]', function (event) {
+                event.preventDefault();
+                self.deleteSchemasSavedView();
+            });
+        },
+
+        getAllSchemasSavedViews: function () {
+            var result = [];
+            var seen = {};
+
+            var append = function (view) {
+                if (!view || typeof view.id !== 'string') {
+                    return;
+                }
+                if (seen[view.id]) {
+                    return;
+                }
+                seen[view.id] = true;
+                result.push(view);
+            };
+
+            for (var i = 0; i < this.schemasDefaultSavedViews.length; i++) {
+                append(this.schemasDefaultSavedViews[i]);
+            }
+
+            for (var j = 0; j < this.schemasSavedViews.length; j++) {
+                append(this.schemasSavedViews[j]);
+            }
+
+            return result;
+        },
+
+        renderSchemasSavedViews: function () {
+            var $select = $('[data-role="schemas-saved-view"]');
+            if (!$select.length) {
+                return;
+            }
+
+            var current = this.schemasCurrentViewId;
+            var options = ["<option value=''>Текущий фильтр</option>"];
+            var views = this.getAllSchemasSavedViews();
+
+            for (var i = 0; i < views.length; i++) {
+                var view = views[i];
+                options.push('<option value="' + this.escapeHtml(view.id) + '">' + this.escapeHtml(view.name) + '</option>');
+            }
+
+            $select.html(options.join(''));
+
+            if (current) {
+                $select.val(current);
+            } else {
+                $select.val('');
+            }
+
+            if ($select.data('select2')) {
+                $select.trigger('change.select2');
+            }
+        },
+
+        loadSchemasSavedViews: function () {
+            if (!window.localStorage) {
+                return [];
+            }
+
+            try {
+                var raw = window.localStorage.getItem(this.schemasStorageKey);
+                if (!raw) {
+                    return [];
+                }
+
+                var parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    return [];
+                }
+
+                return parsed.filter(function (item) {
+                    return item && typeof item.id === 'string' && typeof item.name === 'string' && item.filters;
+                });
+            } catch (error) {
+                console.warn('Не удалось загрузить Saved Views схем', error);
+                return [];
+            }
+        },
+
+        persistSchemasSavedViews: function () {
+            if (!window.localStorage) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(this.schemasStorageKey, JSON.stringify(this.schemasSavedViews));
+            } catch (error) {
+                console.warn('Не удалось сохранить Saved Views схем', error);
+            }
+
+            this.syncSchemasSavedViews();
+        },
+
+        findSchemasSavedView: function (id) {
+            var views = this.getAllSchemasSavedViews();
+            for (var i = 0; i < views.length; i++) {
+                if (views[i].id === id) {
+                    return views[i];
+                }
+            }
+
+            return null;
+        },
+
+        applySchemasSavedView: function (view) {
+            if (!view || !view.filters) {
+                return;
+            }
+
+            var filters = view.filters;
+            var $search = $('#schemas-search');
+            var $collection = $('#schemas-collection');
+
+            this.isApplyingSchemasView = true;
+
+            if ($search.length) {
+                $search.val(filters.search || '');
+            }
+
+            if ($collection.length) {
+                var value = filters.collection || '';
+                $collection.val(value);
+                if ($collection.data('select2')) {
+                    $collection.trigger('change.select2');
+                } else {
+                    $collection.trigger('change');
+                }
+            }
+
+            var selection = String(filters.selected || filters.schema || '');
+            this.schemasCurrentSelectionId = selection;
+
+            this.isApplyingSchemasView = false;
+
+            this.schemasSelectFirstAfterRender = !selection;
+
+            this.renderSchemasTable();
+            this.renderSchemasSavedViews();
+        },
+
+        createSchemasSavedView: function () {
+            var name = window.prompt('Название сохранённого вида', 'Новый вид');
+            if (!name) {
+                return;
+            }
+
+            name = String(name).trim();
+            if (!name) {
+                return;
+            }
+
+            var filters = this.getSchemaFilters();
+            delete filters.view;
+            filters.selected = this.schemasCurrentSelectionId || '';
+
+            var view = {
+                id: 'schema-view-' + Date.now(),
+                name: name,
+                filters: filters
+            };
+
+            this.schemasSavedViews.push(view);
+            this.schemasCurrentViewId = view.id;
+            this.persistSchemasSavedViews();
+            this.renderSchemasSavedViews();
+            this.applySchemasSavedView(view);
+        },
+
+        deleteSchemasSavedView: function () {
+            if (!this.schemasCurrentViewId) {
+                window.alert('Выберите сохранённый вид для удаления.');
+                return;
+            }
+
+            var id = this.schemasCurrentViewId;
+            var isDefault = this.schemasDefaultSavedViews.some(function (item) {
+                return item && item.id === id;
+            });
+
+            if (isDefault) {
+                window.alert('Нельзя удалить предустановленный Saved View.');
+                return;
+            }
+
+            var initialLength = this.schemasSavedViews.length;
+            this.schemasSavedViews = this.schemasSavedViews.filter(function (item) {
+                return item && item.id !== id;
+            });
+
+            if (initialLength === this.schemasSavedViews.length) {
+                window.alert('Сохранённый вид не найден.');
+                return;
+            }
+
+            this.schemasCurrentViewId = null;
+            this.persistSchemasSavedViews();
+            this.renderSchemasSavedViews();
+            this.renderSchemasTable();
+        },
+
+        syncSchemasSavedViews: function () {
+            var endpoint = window.cmsSchemasSavedViewsEndpoint;
+            if (!endpoint) {
+                return;
+            }
+
+            $.ajax({
+                url: endpoint,
+                method: 'POST',
+                dataType: 'json',
+                contentType: 'application/json',
+                data: JSON.stringify({ views: this.schemasSavedViews })
+            }).fail(function (error) {
+                console.warn('Не удалось синхронизировать Saved Views схем', error);
+            });
         },
 
         getSelectedCollections: function () {

@@ -22,6 +22,7 @@ class DashboardAsset extends AssetBundle
     ];
 
     public $depends = [
+        \yii\web\YiiAsset::class,
         \dmstr\web\AdminLteAsset::class,
     ];
 
@@ -43,6 +44,46 @@ class DashboardAsset extends AssetBundle
             'select2',
             ['select2.min.css'],
             ['select2.full.min.js'],
+            [\dmstr\web\AdminLteAsset::class]
+        );
+
+        AdminLtePlugin::register(
+            $view,
+            'flatpickr',
+            ['flatpickr.min.css'],
+            ['flatpickr.min.js'],
+            [\dmstr\web\AdminLteAsset::class]
+        );
+
+        AdminLtePlugin::register(
+            $view,
+            'dropzone',
+            ['dropzone.css'],
+            ['dropzone.js'],
+            [\dmstr\web\AdminLteAsset::class]
+        );
+
+        AdminLtePlugin::register(
+            $view,
+            'sortablejs',
+            [],
+            ['Sortable.min.js'],
+            [\dmstr\web\AdminLteAsset::class]
+        );
+
+        AdminLtePlugin::register(
+            $view,
+            'tinymce',
+            ['skins/lightgray/skin.min.css'],
+            ['tinymce.min.js'],
+            [\dmstr\web\AdminLteAsset::class]
+        );
+
+        AdminLtePlugin::register(
+            $view,
+            'codemirror',
+            ['codemirror.css'],
+            ['codemirror.js', 'mode/javascript/javascript.js'],
             [\dmstr\web\AdminLteAsset::class]
         );
     }

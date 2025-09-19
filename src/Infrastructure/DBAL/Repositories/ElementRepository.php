@@ -120,6 +120,11 @@ final class ElementRepository implements ElementRepositoryInterface
             schemaId: isset($row['element_schema_id']) ? (int) $row['element_schema_id'] : null,
             publicationPlan: $publicationPlan,
             status: $status,
+            parentId: isset($row['element_parent_id']) ? (int) $row['element_parent_id'] : null,
+            position: isset($row['element_position']) ? (int) $row['element_position'] : 0,
+            leftBoundary: isset($row['element_lft']) ? (int) $row['element_lft'] : null,
+            rightBoundary: isset($row['element_rgt']) ? (int) $row['element_rgt'] : null,
+            depth: isset($row['element_depth']) ? (int) $row['element_depth'] : null,
         );
 
         $locale = (string) $row['element_locale'];
@@ -146,6 +151,11 @@ final class ElementRepository implements ElementRepositoryInterface
                 'element_status' => 'e.status',
                 'element_publication_plan' => 'e.publication_plan',
                 'element_schema_id' => 'e.schema_id',
+                'element_parent_id' => 'e.parent_id',
+                'element_position' => 'e.position',
+                'element_lft' => 'e.lft',
+                'element_rgt' => 'e.rgt',
+                'element_depth' => 'e.depth',
                 'collection_id' => 'c.id',
                 'collection_uid' => 'c.uid',
                 'collection_handle' => 'c.handle',

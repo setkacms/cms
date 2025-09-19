@@ -79,29 +79,33 @@ final class EntriesController extends Controller
     }
 
     /**
-    /**
      * @param array<string, mixed> $collection
      * @return array<string, mixed>|null
      */
     private function findEntry(array $collection, string $id): ?array
     {
         $handle = (string) ($collection['handle'] ?? '');
-        if ($handle === '' || !isset(self::ENTRIES[$handle])) {
+        if ($handle === '') {
             return null;
         }
 
         $reflection = new ReflectionClass($this->entriesRepository);
-         = ->getReflectionConstant('ENTRIES');
-        if ($constant === null) {
+        $entriesConstant = $reflection->getReflectionConstant('ENTRIES');
+        if (!$entriesConstant) {
             return null;
         }
 
-        $entries = $constant->getValue();
-        if (!is_array() || !isset([$handle]) || !is_array([$handle])) {
+        $entries = $entriesConstant->getValue();
+        if (!is_array($entries)) {
             return null;
         }
 
-        foreach ($entries[$handle] as $entry) {
+        $entriesByHandle = $entries[$handle] ?? null;
+        if (!is_array($entriesByHandle)) {
+            return null;
+        }
+
+        foreach ($entriesByHandle as $entry) {
             if ((string) ($entry['id'] ?? '') === (string) $id) {
                 return $entry;
             }
@@ -110,6 +114,7 @@ final class EntriesController extends Controller
         return null;
     }
 
+    /**
      * @param array<string, mixed> $collection
      *
      * @return array<string, mixed>

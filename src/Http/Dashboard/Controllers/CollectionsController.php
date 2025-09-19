@@ -13,7 +13,11 @@ use DateTimeImmutable;
 use Yii;
 use yii\helpers\Html;
 use yii\web\Controller;
+use yii\web\ForbiddenHttpException;
+use yii\web\NotFoundHttpException;
 use yii\web\Response;
+
+use Setka\Cms\Infrastructure\Dashboard\Collections\InMemoryCollectionEntriesRepository;
 
 final class CollectionsController extends Controller
 {
@@ -45,6 +49,18 @@ final class CollectionsController extends Controller
         'sequence' => 'Последовательность',
     ];
 
+    private InMemoryCollectionEntriesRepository $collectionEntriesRepository;
+
+    public function __construct(
+        $id,
+        $module,
+        ?InMemoryCollectionEntriesRepository $collectionEntriesRepository = null,
+        array $config = []
+    ) {
+        $this->collectionEntriesRepository = $collectionEntriesRepository ?? new InMemoryCollectionEntriesRepository();
+        parent::__construct($id, $module, $config);
+    }
+
     public function actionIndex(): string
     {
         return $this->render('index');
@@ -57,8 +73,34 @@ final class CollectionsController extends Controller
 
     public function actionEntries(?string $handle = null): string
     {
+        if ($handle === null || $handle === '') {
+            return $this->render('entries', [
+                'collection' => null,
+                'tree' => [],
+                'savedViews' => [],
+                'statusLabels' => InMemoryCollectionEntriesRepository::STATUS_LABELS,
+            ]);
+        }
+
+        $collection = $this->findCollectionByHandle($handle);
+        if ($collection === null) {
+            throw new NotFoundHttpException('Коллекция не найдена.');
+        }
+
+        $this->assertCanViewEntries($collection);
+
+        $tree = [];
+        if (($collection['structure'] ?? '') === 'tree') {
+            $tree = $this->collectionEntriesRepository->getTree($collection);
+        }
+
+        $savedViews = $collection['entry_saved_views'] ?? [];
+
         return $this->render('entries', [
-            'handle' => $handle,
+            'collection' => $collection,
+            'tree' => $tree,
+            'savedViews' => $savedViews,
+            'statusLabels' => InMemoryCollectionEntriesRepository::STATUS_LABELS,
         ]);
     }
 
@@ -74,6 +116,27 @@ final class CollectionsController extends Controller
         return $this->render('settings', [
             'handle' => $handle,
         ]);
+    }
+
+    public function actionEntriesData(string $handle): Response
+    {
+        $collection = $this->findCollectionByHandle($handle);
+        if ($collection === null) {
+            throw new NotFoundHttpException('Коллекция не найдена.');
+        }
+
+        $this->assertCanViewEntries($collection);
+
+        $request = Yii::$app->request;
+        $response = Yii::$app->response;
+        $response->format = Response::FORMAT_JSON;
+
+        $queryParams = $request->get();
+        unset($queryParams['handle']);
+
+        $response->data = $this->collectionEntriesRepository->getDataTableResponse($collection, $queryParams);
+
+        return $response;
     }
 
     public function actionData(): Response
@@ -195,6 +258,59 @@ final class CollectionsController extends Controller
                 'entries' => 128,
                 'status' => 'published',
                 'updated_at' => '2025-03-05 10:24:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                    ['code' => 'en-US', 'label' => 'English'],
+                ],
+                'taxonomies' => [
+                    [
+                        'handle' => 'topics',
+                        'label' => 'Темы',
+                        'terms' => [
+                            ['slug' => 'analytics', 'name' => 'Аналитика'],
+                            ['slug' => 'marketing', 'name' => 'Маркетинг'],
+                            ['slug' => 'workflow', 'name' => 'Процессы'],
+                            ['slug' => 'culture', 'name' => 'Культура'],
+                        ],
+                    ],
+                    [
+                        'handle' => 'channels',
+                        'label' => 'Каналы',
+                        'terms' => [
+                            ['slug' => 'site', 'name' => 'Сайт'],
+                            ['slug' => 'magazine', 'name' => 'Журнал'],
+                            ['slug' => 'newsletter', 'name' => 'Рассылка'],
+                        ],
+                    ],
+                ],
+                'fields' => [
+                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                    ['handle' => 'reading_time', 'label' => 'Время чтения (мин)', 'type' => 'number'],
+                    ['handle' => 'promo', 'label' => 'Промо-подборка', 'type' => 'boolean'],
+                ],
+                'entry_saved_views' => [
+                    [
+                        'id' => 'recent-publications',
+                        'name' => 'Свежие публикации',
+                        'filters' => [
+                            'statuses' => ['published'],
+                            'updated_from' => '2025-03-01',
+                        ],
+                    ],
+                    [
+                        'id' => 'drafts-ru',
+                        'name' => 'Черновики (RU)',
+                        'filters' => [
+                            'statuses' => ['draft'],
+                            'locales' => ['ru-RU'],
+                        ],
+                    ],
+                ],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 2,
@@ -204,6 +320,29 @@ final class CollectionsController extends Controller
                 'entries' => 45,
                 'status' => 'published',
                 'updated_at' => '2025-03-06 08:05:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [
+                    [
+                        'handle' => 'regions',
+                        'label' => 'Регионы',
+                        'terms' => [
+                            ['slug' => 'moscow', 'name' => 'Москва'],
+                            ['slug' => 'spb', 'name' => 'Санкт-Петербург'],
+                            ['slug' => 'global', 'name' => 'Мир'],
+                        ],
+                    ],
+                ],
+                'fields' => [
+                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => false,
+                    'bulkActions' => false,
+                ],
             ],
             [
                 'id' => 3,
@@ -213,6 +352,48 @@ final class CollectionsController extends Controller
                 'entries' => 12,
                 'status' => 'draft',
                 'updated_at' => '2025-02-27 14:40:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                    ['code' => 'en-US', 'label' => 'English'],
+                ],
+                'taxonomies' => [
+                    [
+                        'handle' => 'topics',
+                        'label' => 'Темы',
+                        'terms' => [
+                            ['slug' => 'leadership', 'name' => 'Лидерство'],
+                            ['slug' => 'engineering', 'name' => 'Инженерия'],
+                            ['slug' => 'product', 'name' => 'Продукт'],
+                        ],
+                    ],
+                    [
+                        'handle' => 'channels',
+                        'label' => 'Каналы',
+                        'terms' => [
+                            ['slug' => 'site', 'name' => 'Сайт'],
+                            ['slug' => 'video', 'name' => 'Видео'],
+                        ],
+                    ],
+                ],
+                'fields' => [
+                    ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                    ['handle' => 'reading_time', 'label' => 'Время чтения (мин)', 'type' => 'number'],
+                    ['handle' => 'promo', 'label' => 'Тизер', 'type' => 'boolean'],
+                ],
+                'entry_saved_views' => [
+                    [
+                        'id' => 'published-tree',
+                        'name' => 'Опубликованные ветки',
+                        'filters' => [
+                            'statuses' => ['published'],
+                        ],
+                    ],
+                ],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 4,
@@ -222,6 +403,20 @@ final class CollectionsController extends Controller
                 'entries' => 210,
                 'status' => 'archived',
                 'updated_at' => '2024-12-18 09:30:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                    ['code' => 'en-US', 'label' => 'English'],
+                ],
+                'taxonomies' => [],
+                'fields' => [
+                    ['handle' => 'editor', 'label' => 'Редактор', 'type' => 'text'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 5,
@@ -231,6 +426,28 @@ final class CollectionsController extends Controller
                 'entries' => 32,
                 'status' => 'published',
                 'updated_at' => '2025-03-02 16:55:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [
+                    [
+                        'handle' => 'type',
+                        'label' => 'Тип',
+                        'terms' => [
+                            ['slug' => 'webinar', 'name' => 'Вебинар'],
+                            ['slug' => 'offline', 'name' => 'Оффлайн'],
+                        ],
+                    ],
+                ],
+                'fields' => [
+                    ['handle' => 'location', 'label' => 'Локация', 'type' => 'text'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 6,
@@ -240,6 +457,19 @@ final class CollectionsController extends Controller
                 'entries' => 8,
                 'status' => 'draft',
                 'updated_at' => '2025-01-21 11:15:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [],
+                'fields' => [
+                    ['handle' => 'owner', 'label' => 'Владелец', 'type' => 'text'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => false,
+                ],
             ],
             [
                 'id' => 7,
@@ -249,6 +479,19 @@ final class CollectionsController extends Controller
                 'entries' => 64,
                 'status' => 'published',
                 'updated_at' => '2025-02-14 18:20:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [],
+                'fields' => [
+                    ['handle' => 'rating', 'label' => 'Оценка', 'type' => 'number'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 8,
@@ -258,6 +501,17 @@ final class CollectionsController extends Controller
                 'entries' => 5,
                 'status' => 'archived',
                 'updated_at' => '2024-11-03 12:00:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [],
+                'fields' => [],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => false,
+                    'bulkActions' => false,
+                ],
             ],
             [
                 'id' => 9,
@@ -267,6 +521,29 @@ final class CollectionsController extends Controller
                 'entries' => 27,
                 'status' => 'published',
                 'updated_at' => '2025-03-07 07:45:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                    ['code' => 'en-US', 'label' => 'English'],
+                ],
+                'taxonomies' => [
+                    [
+                        'handle' => 'hosts',
+                        'label' => 'Ведущие',
+                        'terms' => [
+                            ['slug' => 'anna', 'name' => 'Анна'],
+                            ['slug' => 'sergey', 'name' => 'Сергей'],
+                        ],
+                    ],
+                ],
+                'fields' => [
+                    ['handle' => 'duration', 'label' => 'Длительность (мин)', 'type' => 'number'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
             [
                 'id' => 10,
@@ -276,8 +553,52 @@ final class CollectionsController extends Controller
                 'entries' => 14,
                 'status' => 'draft',
                 'updated_at' => '2025-02-25 13:05:00',
+                'locales' => [
+                    ['code' => 'ru-RU', 'label' => 'Русский'],
+                ],
+                'taxonomies' => [],
+                'fields' => [
+                    ['handle' => 'contact', 'label' => 'Контакт', 'type' => 'text'],
+                ],
+                'entry_saved_views' => [],
+                'permissions' => [
+                    'viewEntries' => true,
+                    'createEntries' => true,
+                    'bulkActions' => true,
+                ],
             ],
         ];
+    }
+
+    private function findCollectionByHandle(string $handle): ?array
+    {
+        foreach ($this->getCollectionsDataset() as $collection) {
+            if (($collection['handle'] ?? null) === $handle) {
+                return $collection;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $collection
+     */
+    private function assertCanViewEntries(array $collection): void
+    {
+        $user = Yii::$app->user;
+        if ($user === null || $user->isGuest) {
+            throw new ForbiddenHttpException('Недостаточно прав для просмотра записей коллекции.');
+        }
+
+        if (!$user->can('collections.viewEntries')) {
+            throw new ForbiddenHttpException('Недостаточно прав для просмотра записей коллекции.');
+        }
+
+        $permissions = $collection['permissions']['viewEntries'] ?? true;
+        if ($permissions === false) {
+            throw new ForbiddenHttpException('Доступ к записям коллекции ограничен.');
+        }
     }
 
     /**

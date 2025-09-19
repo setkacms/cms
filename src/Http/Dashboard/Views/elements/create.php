@@ -38,8 +38,49 @@ $this->params['breadcrumbs'][] = $this->title;
                 </div>
                 <div class="form-group">
                     <label for="element-content">Содержимое</label>
-                    <textarea id="element-content" class="form-control" rows="12" placeholder="Тело материала, поддерживается Markdown/HTML"></textarea>
-                    <p class="help-block">Позже здесь появится WYSIWYG-редактор.</p>
+                    <div class="matrix" data-role="matrix" data-matrix-name="element-content">
+                        <input
+                            type="hidden"
+                            id="element-content"
+                            name="Element[content]"
+                            data-role="matrix-storage"
+                            value=""
+                        >
+                        <div class="matrix__blocks" data-role="matrix-blocks"></div>
+                        <div class="matrix__empty text-muted" data-role="matrix-empty">
+                            Блоки ещё не добавлены. Нажмите «Добавить блок», чтобы начать заполнять материал.
+                        </div>
+                        <div class="matrix__actions">
+                            <div class="btn-group">
+                                <button type="button" class="btn btn-default btn-sm" data-role="matrix-add" data-block-type="text">
+                                    <i class="fa fa-plus"></i> Добавить блок
+                                </button>
+                            </div>
+                        </div>
+                        <template data-role="matrix-template" data-block-type="text">
+                            <div class="matrix-block" data-role="matrix-block" data-block-type="text">
+                                <div class="matrix-block__header">
+                                    <div class="matrix-block__title">
+                                        <span class="matrix-block__handle" data-role="matrix-handle" title="Перетащите для изменения порядка">
+                                            <i class="fa fa-bars"></i>
+                                        </span>
+                                        <span class="matrix-block__label">Текстовый блок</span>
+                                    </div>
+                                    <div class="matrix-block__controls">
+                                        <button type="button" class="btn btn-default btn-xs" data-role="matrix-remove" title="Удалить блок">
+                                            <i class="fa fa-trash"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                                <div class="matrix-block__body">
+                                    <div class="matrix-block__editor" data-role="matrix-editor"></div>
+                                    <input type="hidden" data-role="matrix-block-type" value="text">
+                                    <input type="hidden" data-role="matrix-block-value" value="">
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                    <p class="help-block">Блоковый редактор поддерживает Quill, перетаскивание и гибкую структуру материала.</p>
                 </div>
             </div>
             <div class="col-md-4">

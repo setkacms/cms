@@ -65,3 +65,93 @@ h1, h2, h3, h4, h5, h6 {
 .workflow-state-ghost {
   background-color: #ecf5ff !important;
 }
+
+.matrix {
+  border: 1px solid #d2d6de;
+  border-radius: 4px;
+  background-color: #ffffff;
+}
+
+.matrix__blocks {
+  padding: 12px;
+}
+
+.matrix__empty {
+  border: 1px dashed #d2d6de;
+  background-color: #f9f9f9;
+  padding: 16px;
+  margin: 0 12px 12px 12px;
+  text-align: center;
+  font-size: 13px;
+}
+
+.matrix__actions {
+  border-top: 1px solid #e5e5e5;
+  background-color: #fafafa;
+  padding: 8px 12px;
+  text-align: right;
+}
+
+.matrix-block {
+  border: 1px solid #d2d6de;
+  border-radius: 4px;
+  background-color: #ffffff;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, 0.05);
+}
+
+.matrix-block:last-child {
+  margin-bottom: 0;
+}
+
+.matrix-block__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e5e5e5;
+  background-color: #f7f7f7;
+}
+
+.matrix-block__title {
+  display: flex;
+  align-items: center;
+  font-weight: 600;
+  color: #444444;
+}
+
+.matrix-block__handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 8px;
+  color: #9e9e9e;
+  cursor: move;
+}
+
+.matrix-block__controls .btn {
+  color: #dd4b39;
+}
+
+.matrix-block__body {
+  padding: 12px;
+}
+
+.matrix-block__editor .ql-editor {
+  min-height: 160px;
+}
+
+.matrix-block--ghost {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.matrix-block--drag {
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+}
+
+.matrix--filled .matrix__empty {
+  display: none;
+}

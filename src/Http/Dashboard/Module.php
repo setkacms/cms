@@ -8,6 +8,15 @@
 namespace Setka\Cms\Http\Dashboard;
 
 use RuntimeException;
+use Setka\Cms\Domain\Dashboard\ActivityRepositoryInterface;
+use Setka\Cms\Domain\Dashboard\MetricsRepositoryInterface;
+use Setka\Cms\Domain\Dashboard\QuickActionRepositoryInterface;
+use Setka\Cms\Domain\Dashboard\WarningRepositoryInterface;
+use Setka\Cms\Infrastructure\Dashboard\InMemoryActivityRepository;
+use Setka\Cms\Infrastructure\Dashboard\InMemoryMetricsRepository;
+use Setka\Cms\Infrastructure\Dashboard\InMemoryQuickActionRepository;
+use Setka\Cms\Infrastructure\Dashboard\InMemoryWarningRepository;
+use Yii;
 use yii\base\Module as BaseModule;
 
 class Module extends BaseModule
@@ -28,5 +37,11 @@ class Module extends BaseModule
         $this->setViewPath($viewPath);
         $this->setLayoutPath($viewPath . DIRECTORY_SEPARATOR . 'layouts');
         $this->layout = 'main';
+
+        $container = Yii::$container;
+        $container->set(MetricsRepositoryInterface::class, InMemoryMetricsRepository::class);
+        $container->set(ActivityRepositoryInterface::class, InMemoryActivityRepository::class);
+        $container->set(WarningRepositoryInterface::class, InMemoryWarningRepository::class);
+        $container->set(QuickActionRepositoryInterface::class, InMemoryQuickActionRepository::class);
     }
 }

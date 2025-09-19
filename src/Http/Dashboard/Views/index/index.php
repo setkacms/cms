@@ -1,194 +1,212 @@
 <?php
 
-use Setka\Cms\Domain\Assets\Asset;
-use Setka\Cms\Domain\Assets\ElementAssetCollection;
-use Setka\Cms\Domain\Taxonomy\Term;
+declare(strict_types=1);
+
+use Setka\Cms\Domain\Dashboard\Activity;
+use Setka\Cms\Domain\Dashboard\Metric;
+use Setka\Cms\Domain\Dashboard\QuickAction;
+use Setka\Cms\Domain\Dashboard\Warning;
 use yii\helpers\Html;
 
-/* @var $this \yii\web\View */
-/* @var \Setka\Cms\Domain\Taxonomy\Taxonomy|null $sampleTaxonomy */
-/* @var array<int, array{term: Term, children: array}> $taxonomyTree */
-/* @var string $taxonomyLocale */
-/* @var Asset[] $assets */
-/* @var ElementAssetCollection|null $assetAttachments */
+/* @var $this yii\web\View */
+/* @var Metric[] $metrics */
+/* @var Activity[] $activities */
+/* @var array<string, string> $activityTypes */
+/* @var Warning[] $warnings */
+/* @var QuickAction[] $quickActions */
+/* @var int $cacheTtl */
 
-$this->title = 'Dashboard';
+$this->title = 'Панель управления';
+$this->params['breadcrumbs'][] = $this->title;
 ?>
 
-<h1><?= Html::encode($this->title) ?></h1>
-<p>Welcome to the Setka CMS dashboard.</p>
-
-<style>
-.media-library {
-    margin-top: 32px;
-}
-
-.media-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.media-card {
-    border: 1px solid #e5e7eb;
-    border-radius: 8px;
-    padding: 16px;
-    background: #ffffff;
-    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
-}
-
-.media-card h3 {
-    font-size: 16px;
-    margin-bottom: 8px;
-}
-
-.media-meta {
-    font-size: 13px;
-    color: #6b7280;
-    margin-bottom: 12px;
-}
-
-.variant-list {
-    list-style: none;
-    padding: 0;
-    margin: 0 0 12px;
-    font-size: 13px;
-}
-
-.variant-list li {
-    display: flex;
-    justify-content: space-between;
-    padding: 2px 0;
-}
-
-.asset-attachments {
-    margin-top: 32px;
-}
-
-.asset-attachments table {
-    width: 100%;
-}
-
-.text-muted {
-    color: #6b7280;
-}
-</style>
-
-<?php
-$formatSize = static function (int $size): string {
-    if ($size >= 1_048_576) {
-        return number_format($size / 1_048_576, 1) . ' MB';
-    }
-
-    if ($size >= 1_024) {
-        return number_format($size / 1_024, 1) . ' KB';
-    }
-
-    return $size . ' B';
-};
-?>
-
-<?php if (!empty($taxonomyTree) && isset($sampleTaxonomy, $taxonomyLocale)): ?>
-    <div class="taxonomy-preview">
-        <h2><?= Html::encode($sampleTaxonomy->getName()) ?></h2>
-        <p><?= Html::encode('Локаль отображения: ' . $taxonomyLocale) ?></p>
-        <?php
-        $renderTree = function (array $nodes) use (&$renderTree): string {
-            if ($nodes === []) {
-                return '';
-            }
-
-            $html = '<ul>';
-            foreach ($nodes as $node) {
-                /** @var Term $term */
-                $term = $node['term'];
-                $html .= '<li>' . Html::encode($term->getName());
-                if (!empty($node['children'])) {
-                    $html .= $renderTree($node['children']);
-                }
-                $html .= '</li>';
-            }
-
-            $html .= '</ul>';
-
-            return $html;
-        };
-
-        echo $renderTree($taxonomyTree);
-        ?>
-    </div>
-<?php endif; ?>
-
-<?php if (!empty($assets ?? [])): ?>
-    <div class="media-library">
-        <h2>Медиа-библиотека</h2>
-        <div class="media-grid">
-            <?php foreach ($assets as $asset): ?>
-                <div class="media-card">
-                    <h3><?= Html::encode($asset->getFileName()) ?></h3>
-                    <p class="media-meta">
-                        <?= Html::encode($asset->getMimeType()) ?> · <?= Html::encode($formatSize($asset->getSize())) ?>
-                    </p>
-
-                    <?php $variants = $asset->getVariants(); ?>
-                    <?php if ($variants !== []): ?>
-                        <ul class="variant-list">
-                            <?php foreach ($variants as $variant): ?>
-                                <li>
-                                    <span><strong><?= Html::encode($variant->getName()) ?></strong></span>
-                                    <?php if ($variant->getWidth() !== null && $variant->getHeight() !== null): ?>
-                                        <span><?= Html::encode($variant->getWidth() . '×' . $variant->getHeight()) ?></span>
-                                    <?php else: ?>
-                                        <span class="text-muted"><?= Html::encode($formatSize($variant->getSize())) ?></span>
-                                    <?php endif; ?>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
-                    <?php else: ?>
-                        <p class="text-muted">Варианты не заданы.</p>
-                    <?php endif; ?>
-
-                    <label>
-                        <input type="checkbox" checked>
-                        Добавить к элементу
-                    </label>
+<div class="row">
+    <?php foreach ($metrics as $metric): ?>
+        <div class="col-lg-3 col-md-6 col-sm-6 col-xs-12">
+            <div class="small-box <?= Html::encode($metric->getBackgroundCssClass()) ?>" data-metric="<?= Html::encode($metric->getId()) ?>">
+                <div class="inner">
+                    <h3><?= Html::encode((string) $metric->getValue()) ?></h3>
+                    <p><?= Html::encode($metric->getLabel()) ?></p>
                 </div>
-            <?php endforeach; ?>
+                <div class="icon">
+                    <i class="<?= Html::encode($metric->getIcon()) ?>"></i>
+                </div>
+                <?= Html::a(
+                    'Подробнее <i class="fa fa-arrow-circle-right"></i>',
+                    $metric->getUrl(),
+                    [
+                        'class' => 'small-box-footer',
+                        'encode' => false,
+                        'data-pjax' => '0',
+                    ]
+                ) ?>
+            </div>
+        </div>
+    <?php endforeach; ?>
+</div>
+<p class="text-muted small">Обновление каждые <?= Html::encode((string) $cacheTtl) ?> секунд.</p>
+
+<?php if ($warnings !== []): ?>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="box box-warning">
+                <div class="box-header with-border">
+                    <h3 class="box-title">Предупреждения</h3>
+                    <span class="label label-warning"><?= Html::encode((string) count($warnings)) ?></span>
+                </div>
+                <div class="box-body no-padding">
+                    <ul class="list-group list-group-unbordered dashboard-warning-list">
+                        <?php foreach ($warnings as $warning): ?>
+                            <li class="list-group-item">
+                                <span class="text-<?= Html::encode($warning->getLevel()) ?>">
+                                    <i class="<?= Html::encode($warning->getIcon()) ?>"></i>
+                                </span>
+                                <span class="dashboard-warning-message"><?= Html::encode($warning->getMessage()) ?></span>
+                                <?php if ($warning->getActionUrl() !== null): ?>
+                                    <?= Html::a(
+                                        Html::encode($warning->getActionLabel() ?? 'Подробнее'),
+                                        $warning->getActionUrl(),
+                                        ['class' => 'btn btn-link btn-xs pull-right', 'data-pjax' => '0']
+                                    ) ?>
+                                <?php endif; ?>
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                </div>
+            </div>
         </div>
     </div>
 <?php endif; ?>
 
-<?php if (isset($assetAttachments) && !$assetAttachments->isEmpty()): ?>
-    <div class="asset-attachments">
-        <h2>Привязанные медиа</h2>
-        <table class="table table-striped">
-            <thead>
-            <tr>
-                <th>Роль</th>
-                <th>Файл</th>
-                <th>Варианты</th>
-                <th class="text-muted">Позиция</th>
-            </tr>
-            </thead>
-            <tbody>
-            <?php foreach ($assetAttachments as $attachment): ?>
-                <?php $attachmentAsset = $attachment->getAsset(); ?>
-                <tr>
-                    <td><?= Html::encode($attachment->getRole()) ?></td>
-                    <td>
-                        <?php if ($attachmentAsset !== null): ?>
-                            <?= Html::encode($attachmentAsset->getFileName()) ?>
-                        <?php else: ?>
-                            <?= Html::encode('ID ' . $attachment->getAssetId()) ?>
-                        <?php endif; ?>
-                    </td>
-                    <td><?= Html::encode(implode(', ', $attachment->getVariants())) ?></td>
-                    <td class="text-muted">#<?= Html::encode((string) $attachment->getPosition()) ?></td>
-                </tr>
-            <?php endforeach; ?>
-            </tbody>
-        </table>
+<?php if ($quickActions !== []): ?>
+    <div class="row">
+        <div class="col-md-12">
+            <div class="box box-primary">
+                <div class="box-header with-border">
+                    <h3 class="box-title">Быстрые действия</h3>
+                </div>
+                <div class="box-body">
+                    <div class="row dashboard-quick-actions">
+                        <?php foreach ($quickActions as $action): ?>
+                            <?php
+                            $options = $action->getHtmlAttributes();
+                            $options['data-pjax'] = '0';
+                            $options['encode'] = false;
+                            $options['class'] = trim(($options['class'] ?? 'btn btn-default btn-sm') . ' dashboard-quick-action-link');
+                            ?>
+                            <div class="col-sm-4">
+                                <div class="info-box">
+                                    <span class="info-box-icon bg-light-blue"><i class="<?= Html::encode($action->getIcon()) ?>"></i></span>
+                                    <div class="info-box-content">
+                                        <span class="info-box-text"><?= Html::encode($action->getLabel()) ?></span>
+                                        <span class="info-box-number text-muted small"><?= Html::encode($action->getDescription()) ?></span>
+                                        <?= Html::a('<i class="fa fa-arrow-right"></i> Запустить', $action->getUrl(), $options) ?>
+                                    </div>
+                                </div>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 <?php endif; ?>
 
+<div class="row">
+    <div class="col-md-8">
+        <div class="box box-solid" data-role="activity-panel">
+            <div class="box-header with-border">
+                <h3 class="box-title">Последние активности</h3>
+                <div class="box-tools">
+                    <div class="form-inline">
+                        <div class="form-group">
+                            <label class="sr-only" for="activity-type-filter">Фильтр по типу</label>
+                            <select id="activity-type-filter" class="form-control input-sm select2" data-placeholder="Все типы" style="width: 180px;">
+                                <option></option>
+                                <?php foreach ($activityTypes as $type => $label): ?>
+                                    <option value="<?= Html::encode($type) ?>"><?= Html::encode($label) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <button type="button" class="btn btn-default btn-sm" data-action="reset-filter">
+                            <i class="fa fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="box-body no-padding">
+                <div class="table-responsive">
+                    <table id="activity-table" class="table table-hover table-striped" data-role="activity-table">
+                        <thead>
+                        <tr>
+                            <th class="text-center" style="width: 40px;">
+                                <input type="checkbox" data-role="select-all">
+                            </th>
+                            <th>Событие</th>
+                            <th class="hidden-xs">Автор</th>
+                            <th class="hidden-xs" style="width: 140px;">Дата</th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($activities as $activity): ?>
+                            <tr
+                                data-id="<?= Html::encode((string) $activity->getId()) ?>"
+                                data-type="<?= Html::encode($activity->getType()) ?>"
+                                data-title="<?= Html::encode($activity->getTitle()) ?>"
+                                data-description="<?= Html::encode($activity->getDescription()) ?>"
+                                data-timestamp="<?= Html::encode($activity->getHappenedAt()->format('d.m.Y H:i')) ?>"
+                            >
+                                <td class="text-center">
+                                    <input type="checkbox" value="<?= Html::encode((string) $activity->getId()) ?>">
+                                </td>
+                                <td>
+                                    <i class="<?= Html::encode($activity->getIcon()) ?> text-muted"></i>
+                                    <?php if ($activity->getUrl() !== null): ?>
+                                        <?= Html::a(Html::encode($activity->getTitle()), $activity->getUrl(), ['class' => 'dashboard-activity-link', 'data-pjax' => '0']) ?>
+                                    <?php else: ?>
+                                        <?= Html::encode($activity->getTitle()) ?>
+                                    <?php endif; ?>
+                                    <div class="small text-muted"><?= Html::encode($activity->getDescription()) ?></div>
+                                </td>
+                                <td class="hidden-xs"><?= Html::encode($activity->getAuthor()) ?></td>
+                                <td class="hidden-xs"><?= Html::encode($activity->getHappenedAt()->format('d.m.Y H:i')) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="box-footer clearfix">
+                <div class="pull-left">
+                    <select class="form-control input-sm select2" style="width: 220px;" data-placeholder="Массовое действие" data-role="bulk-action">
+                        <option></option>
+                        <option value="assign">Назначить ревьюера</option>
+                        <option value="publish">Отправить на публикацию</option>
+                        <option value="archive">Переместить в архив</option>
+                    </select>
+                </div>
+                <div class="pull-right">
+                    <button type="button" class="btn btn-primary btn-sm" data-action="bulk-update">
+                        <i class="fa fa-play"></i> Выполнить
+                    </button>
+                </div>
+                <div id="bulk-action-result" class="text-muted small hidden"></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="box box-info" id="activity-preview">
+            <div class="box-header with-border">
+                <h3 class="box-title">Предпросмотр</h3>
+            </div>
+            <div class="box-body">
+                <h4 class="text-primary" data-preview-title>Выберите событие</h4>
+                <p class="dashboard-preview-description" data-preview-description>Кликните по записи, чтобы увидеть детали.</p>
+                <p class="small text-muted">
+                    <i class="fa fa-clock-o"></i>
+                    <span data-preview-time>—</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>

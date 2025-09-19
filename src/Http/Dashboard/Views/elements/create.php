@@ -3,18 +3,38 @@
 declare(strict_types=1);
 
 use yii\helpers\Html;
+use yii\helpers\Json;
 
 /* @var $this yii\web\View */
 
 $this->title = 'Создание элемента';
 $this->params['breadcrumbs'][] = ['label' => 'Элементы', 'url' => ['index']];
 $this->params['breadcrumbs'][] = $this->title;
+
+$unsavedMessage = 'У вас есть несохранённые изменения. Если покинете страницу, последние правки могут быть утеряны.';
+$autosaveMessages = [
+    'clean' => 'Все изменения сохранены',
+    'dirty' => 'Есть несохранённые изменения',
+    'saving' => 'Сохранение…',
+    'saved' => 'Черновик сохранён в {time}',
+    'error' => 'Не удалось сохранить черновик',
+    'beforeUnload' => $unsavedMessage,
+];
 ?>
 
-<div class="box box-success" data-role="element-form">
+<div
+    class="box box-success"
+    data-role="element-form"
+    data-unsaved-message="<?= Html::encode($unsavedMessage) ?>"
+    data-autosave-storage-key="dashboard.element.create.draft"
+    data-autosave-debounce="2500"
+>
     <div class="box-header with-border">
         <h3 class="box-title">Новый элемент</h3>
         <div class="box-tools">
+            <div class="text-muted small" data-role="autosave-status" aria-live="polite">
+                <?= Html::encode($autosaveMessages['clean']) ?>
+            </div>
             <div class="btn-group btn-group-sm">
                 <button type="button" class="btn btn-default" data-action="toggle-preview">
                     <i class="fa fa-eye"></i> Предпросмотр
@@ -26,6 +46,9 @@ $this->params['breadcrumbs'][] = $this->title;
         </div>
     </div>
     <div class="box-body">
+        <p class="text-muted small" data-role="autosave-hint">
+            Изменения сохраняются автоматически спустя несколько секунд после редактирования. Используйте «Сохранить черновик» или «Опубликовать», чтобы принудительно зафиксировать версию. При попытке покинуть страницу с несохранёнными данными появится предупреждение.
+        </p>
         <div class="row">
             <div class="col-md-8">
                 <div class="form-group">
@@ -159,6 +182,41 @@ $this->params['breadcrumbs'][] = $this->title;
         </div>
     </div>
 </div>
+
+<?php
+$autosaveMessagesJson = Json::htmlEncode($autosaveMessages);
+$this->registerJs(<<<JS
+(function () {
+    var defaults = {$autosaveMessagesJson};
+    window.cmsElementEditorMessages = window.cmsElementEditorMessages || {};
+    window.cmsElementEditorMessages.autosaveClean = defaults.clean;
+    window.cmsElementEditorMessages.autosaveDirty = defaults.dirty;
+    window.cmsElementEditorMessages.autosaveSaving = defaults.saving;
+    window.cmsElementEditorMessages.autosaveSaved = defaults.saved;
+    window.cmsElementEditorMessages.autosaveError = defaults.error;
+    window.cmsElementEditorMessages.beforeUnload = defaults.beforeUnload;
+
+    if (!window.cmsElementBeforeUnloadHandler) {
+        window.cmsElementBeforeUnloadHandler = function (event) {
+            if (!window.CMSDashboard || typeof window.CMSDashboard.isElementFormDirty !== 'function') {
+                return;
+            }
+
+            if (!window.CMSDashboard.isElementFormDirty()) {
+                return;
+            }
+
+            var message = window.cmsElementEditorMessages.beforeUnload || defaults.beforeUnload;
+            event.preventDefault();
+            event.returnValue = message;
+            return message;
+        };
+
+        window.addEventListener('beforeunload', window.cmsElementBeforeUnloadHandler);
+    }
+})();
+JS);
+?>
 
 <div class="modal fade" id="element-history" tabindex="-1" role="dialog" aria-labelledby="element-history-label">
     <div class="modal-dialog modal-lg" role="document">

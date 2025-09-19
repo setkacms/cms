@@ -64,11 +64,19 @@ $this->params['breadcrumbs'][] = $this->title;
                     </div>
                     <div class="form-group">
                         <label for="relation-source">Источник</label>
-                        <select id="relation-source" class="form-control select2"></select>
+                        <select id="relation-source"
+                                class="form-control select2"
+                                data-role="relation-source"
+                                data-placeholder="Выберите элемент-источник"
+                                data-skip-global-init="true"></select>
                     </div>
                     <div class="form-group">
                         <label for="relation-target">Получатель</label>
-                        <select id="relation-target" class="form-control select2"></select>
+                        <select id="relation-target"
+                                class="form-control select2"
+                                data-role="relation-target"
+                                data-placeholder="Выберите элемент-получатель"
+                                data-skip-global-init="true"></select>
                     </div>
                 </form>
             </div>

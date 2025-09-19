@@ -34,32 +34,24 @@ $this->params['breadcrumbs'][] = $this->title;
                 </div>
             </div>
             <div class="col-sm-6 text-right">
-                <select class="form-control input-sm" data-role="taxonomy-filter" style="max-width: 220px;">
-                    <option value="">Все таксономии</option>
+                <select class="form-control input-sm select2"
+                        data-role="taxonomy-filter"
+                        data-placeholder="Выберите таксономию"
+                        style="max-width: 260px;">
                 </select>
             </div>
         </div>
-        <div class="table-responsive">
-            <table class="table table-striped" data-role="terms-table">
-                <thead>
-                <tr>
-                    <th>Название</th>
-                    <th class="hidden-xs">Слаг</th>
-                    <th class="hidden-xs">Таксономия</th>
-                    <th style="width: 120px;" class="hidden-xs">Использований</th>
-                </tr>
-                </thead>
-                <tbody>
-                <tr class="empty">
-                    <td colspan="4" class="text-center text-muted">Список терминов пуст.</td>
-                </tr>
-                </tbody>
-            </table>
+        <div class="taxonomy-terms-tree" data-role="terms-panel">
+            <div class="alert alert-info" data-role="terms-empty">
+                Выберите таксономию или измените условия поиска, чтобы увидеть дерево терминов.
+            </div>
+            <ul class="list-unstyled" data-role="terms-tree"></ul>
         </div>
+        <p class="help-block" data-role="terms-feedback"></p>
     </div>
     <div class="box-footer clearfix">
-        <div class="pull-left text-muted small">
-            Используйте drag-n-drop для изменения иерархии (будет доступно позже).
+        <div class="pull-left text-muted small" data-role="terms-summary">
+            Перетаскивайте термины для изменения порядка и вложенности. Поиск работает по названию и слагу.
         </div>
         <div class="pull-right">
             <?= Html::a('<i class="fa fa-angle-left"></i> К таксономиям', ['index'], [

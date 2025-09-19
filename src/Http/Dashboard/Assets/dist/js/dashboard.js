@@ -32,6 +32,20 @@
         taxonomyCurrentIndex: {},
         taxonomySearchQuery: '',
         taxonomyStorageKey: 'dashboard.taxonomy.lastHandle',
+        elementAutosaveContainer: null,
+        elementAutosaveStatusElement: null,
+        elementAutosaveTimer: null,
+        elementAutosavePending: false,
+        elementAutosaveDirty: false,
+        elementAutosaveSaving: false,
+        elementAutosaveRevision: 0,
+        elementAutosaveCurrentPromise: null,
+        elementAutosaveLastSaved: null,
+        elementAutosaveStorageKey: 'dashboard.element.autosave',
+        elementAutosaveDebounce: 2000,
+        elementAutosaveMessagesCache: null,
+        elementAutosaveReady: false,
+        elementAutosaveStatus: 'clean',
 
         init: function () {
             this.initSelect2();
@@ -52,6 +66,7 @@
             this.initRelationsModule();
             this.initMediaLibraryModule();
             this.initTaxonomyTermsModule();
+            this.initElementAutosaveModule();
         },
 
         initSelect2: function () {
@@ -1197,6 +1212,491 @@
                     self.activityTable.draw();
                 }
             });
+        },
+
+        initElementAutosaveModule: function () {
+            var $container = $('[data-role="element-form"]');
+            if (!$container.length) {
+                return;
+            }
+
+            if ($container.data('elementAutosaveInitialized')) {
+                return;
+            }
+
+            $container.data('elementAutosaveInitialized', true);
+
+            this.elementAutosaveContainer = $container;
+            this.elementAutosaveStatusElement = null;
+            this.elementAutosaveMessagesCache = null;
+            this.elementAutosaveTimer = null;
+            this.elementAutosavePending = false;
+            this.elementAutosaveDirty = false;
+            this.elementAutosaveSaving = false;
+            this.elementAutosaveRevision = 0;
+            this.elementAutosaveCurrentPromise = null;
+            this.elementAutosaveLastSaved = null;
+            this.elementAutosaveReady = false;
+            this.elementAutosaveStatus = 'clean';
+
+            var storageKey = String($container.attr('data-autosave-storage-key') || '');
+            if (storageKey) {
+                this.elementAutosaveStorageKey = storageKey;
+            }
+
+            var debounceAttr = parseInt($container.attr('data-autosave-debounce'), 10);
+            if (!isNaN(debounceAttr) && debounceAttr > 0) {
+                this.elementAutosaveDebounce = debounceAttr;
+            }
+
+            this.bindElementAutosaveActions($container);
+
+            var self = this;
+            var changeSelector = 'input, textarea, select, [contenteditable="true"]';
+
+            $container.on('input change', changeSelector, function (event) {
+                var $target = $(event.target);
+                if ($target.is('[type="button"], [type="submit"], [type="reset"]')) {
+                    return;
+                }
+                if ($target.is(':disabled')) {
+                    return;
+                }
+
+                self.markElementFormDirty();
+            });
+
+            $container.on('matrix:change', '[data-role="matrix"]', function () {
+                self.markElementFormDirty();
+            });
+
+            window.setTimeout(function () {
+                self.elementAutosaveReady = true;
+            }, 0);
+
+            this.updateElementAutosaveStatus('clean');
+        },
+
+        bindElementAutosaveActions: function ($container) {
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            var self = this;
+            var selectors = '[data-action="save-draft"], [data-action="publish-element"]';
+
+            $container.on('click', selectors, function () {
+                self.performElementAutosave({ force: true });
+            });
+        },
+
+        markElementFormDirty: function () {
+            if (!this.elementAutosaveContainer || !this.elementAutosaveContainer.length) {
+                return;
+            }
+
+            if (!this.elementAutosaveReady) {
+                return;
+            }
+
+            this.elementAutosaveRevision += 1;
+            this.elementAutosaveDirty = true;
+            this.updateElementAutosaveStatus('dirty');
+            this.scheduleElementAutosave();
+        },
+
+        scheduleElementAutosave: function () {
+            if (!this.elementAutosaveDirty) {
+                return;
+            }
+
+            if (this.elementAutosaveSaving) {
+                this.elementAutosavePending = true;
+                return;
+            }
+
+            var self = this;
+            this.elementAutosavePending = false;
+            window.clearTimeout(this.elementAutosaveTimer);
+            this.elementAutosaveTimer = window.setTimeout(function () {
+                self.performElementAutosave();
+            }, this.elementAutosaveDebounce);
+        },
+
+        performElementAutosave: function (options) {
+            options = options || {};
+            var forced = !!options.force;
+
+            if (!this.elementAutosaveContainer || !this.elementAutosaveContainer.length) {
+                return $.Deferred().resolve().promise();
+            }
+
+            if (!forced && !this.elementAutosaveDirty) {
+                return $.Deferred().resolve().promise();
+            }
+
+            if (this.elementAutosaveSaving) {
+                if (forced) {
+                    this.elementAutosavePending = true;
+                }
+
+                return this.elementAutosaveCurrentPromise || $.Deferred().resolve().promise();
+            }
+
+            this.elementAutosavePending = false;
+            window.clearTimeout(this.elementAutosaveTimer);
+            this.elementAutosaveTimer = null;
+
+            var payload = this.collectElementFormData(this.elementAutosaveContainer);
+            var revision = this.elementAutosaveRevision;
+
+            this.elementAutosaveSaving = true;
+            this.updateElementAutosaveStatus('saving');
+
+            var self = this;
+            var promise = this.saveElementDraft(payload);
+
+            this.elementAutosaveCurrentPromise = promise;
+
+            return promise.done(function (savedAt) {
+                if (self.elementAutosaveRevision !== revision) {
+                    self.elementAutosaveDirty = true;
+                    self.elementAutosaveLastSaved = savedAt instanceof Date ? savedAt : new Date();
+                    self.updateElementAutosaveStatus('dirty');
+                    return;
+                }
+
+                self.elementAutosaveDirty = false;
+                self.elementAutosaveLastSaved = savedAt instanceof Date ? savedAt : new Date();
+                self.updateElementAutosaveStatus('saved', { savedAt: self.elementAutosaveLastSaved });
+            }).fail(function () {
+                self.elementAutosaveDirty = true;
+                self.updateElementAutosaveStatus('error');
+            }).always(function () {
+                self.elementAutosaveSaving = false;
+                self.elementAutosaveCurrentPromise = null;
+
+                if (self.elementAutosaveDirty) {
+                    self.scheduleElementAutosave();
+                }
+
+                self.elementAutosavePending = false;
+            });
+        },
+
+        collectElementFormData: function ($container) {
+            var data = {};
+            if (!$container || !$container.length) {
+                return data;
+            }
+
+            var $fields = $container.find('input, textarea, select').filter(function () {
+                var $field = $(this);
+                if ($field.is('[type="button"], [type="submit"], [type="reset"]')) {
+                    return false;
+                }
+                if ($field.is(':disabled')) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            $fields.each(function (index) {
+                var $field = $(this);
+                var key = $field.attr('name') || $field.attr('id') || $field.data('autosaveKey') || '';
+                if (!key) {
+                    var role = $field.attr('data-role');
+                    if (role) {
+                        key = 'role:' + role;
+                    }
+                }
+                if (!key) {
+                    key = 'field-' + index;
+                }
+
+                var value;
+                if ($field.is(':checkbox')) {
+                    var checkboxValue = $field.val();
+                    if (checkboxValue && checkboxValue !== 'on' && checkboxValue !== '1' && checkboxValue !== 'true') {
+                        value = $field.prop('checked') ? checkboxValue : '';
+                    } else {
+                        value = $field.prop('checked');
+                    }
+                } else if ($field.is(':radio')) {
+                    if (!$field.prop('checked')) {
+                        return;
+                    }
+                    value = $field.val();
+                } else if ($field.is('select') && $field.prop('multiple')) {
+                    value = $field.val() || [];
+                } else {
+                    value = $field.val();
+                }
+
+                if (typeof value === 'undefined') {
+                    value = '';
+                }
+
+                if (data.hasOwnProperty(key)) {
+                    if (!$.isArray(data[key])) {
+                        data[key] = [data[key]];
+                    }
+                    data[key].push(value);
+                } else {
+                    data[key] = value;
+                }
+            });
+
+            var $editables = $container.find('[contenteditable="true"]').filter(function () {
+                var $editable = $(this);
+                if ($editable.is('[data-autosave-exclude="true"]')) {
+                    return false;
+                }
+
+                return true;
+            });
+
+            $editables.each(function (index) {
+                var $editable = $(this);
+                var key = $editable.attr('data-autosave-key') || $editable.attr('id') || ('editable-' + index);
+
+                if (!data.hasOwnProperty(key)) {
+                    data[key] = $editable.html();
+                }
+            });
+
+            return data;
+        },
+
+        saveElementDraft: function (payload) {
+            var self = this;
+            var savedAt = new Date();
+
+            var persist = function () {
+                self.persistElementDraft(payload, savedAt);
+            };
+
+            var $container = this.elementAutosaveContainer;
+            if ($container && $container.length) {
+                var endpoint = String($container.attr('data-autosave-url') || '');
+                if (endpoint && endpoint !== '#') {
+                    return $.ajax({
+                        url: endpoint,
+                        method: 'POST',
+                        data: payload,
+                        dataType: 'json'
+                    }).then(function () {
+                        persist();
+                        return savedAt;
+                    }, function (xhr) {
+                        persist();
+                        var deferred = $.Deferred();
+                        deferred.reject(xhr);
+                        return deferred.promise();
+                    });
+                }
+            }
+
+            return $.Deferred(function (defer) {
+                window.setTimeout(function () {
+                    try {
+                        persist();
+                        defer.resolve(savedAt);
+                    } catch (error) {
+                        defer.reject(error);
+                    }
+                }, 300);
+            }).promise();
+        },
+
+        persistElementDraft: function (payload, savedAt) {
+            if (!window.localStorage) {
+                return;
+            }
+
+            try {
+                var entry = {
+                    savedAt: (savedAt && savedAt.toISOString) ? savedAt.toISOString() : new Date().toISOString(),
+                    data: payload
+                };
+                window.localStorage.setItem(this.elementAutosaveStorageKey, JSON.stringify(entry));
+            } catch (error) {
+                // ignore storage errors
+            }
+        },
+
+        getElementAutosaveStatusElement: function () {
+            if (this.elementAutosaveStatusElement && this.elementAutosaveStatusElement.length) {
+                return this.elementAutosaveStatusElement;
+            }
+
+            var $container = this.elementAutosaveContainer;
+            if (!$container || !$container.length) {
+                return $();
+            }
+
+            var $status = $container.find('[data-role="autosave-status"]').first();
+            if (!$status.length) {
+                $status = $('<div class="text-muted small" data-role="autosave-status" aria-live="polite"></div>');
+                var $tools = $container.find('.box-header .box-tools').first();
+                if ($tools.length) {
+                    $tools.prepend($status);
+                } else {
+                    $status.prependTo($container);
+                }
+            }
+
+            this.elementAutosaveStatusElement = $status;
+            return $status;
+        },
+
+        getElementAutosaveMessages: function () {
+            if (this.elementAutosaveMessagesCache) {
+                return this.elementAutosaveMessagesCache;
+            }
+
+            var defaults = {
+                clean: 'Все изменения сохранены',
+                dirty: 'Есть несохранённые изменения',
+                saving: 'Сохранение…',
+                saved: 'Черновик сохранён в {time}',
+                error: 'Не удалось сохранить черновик',
+                beforeUnload: 'У вас есть несохранённые изменения. Вы уверены, что хотите покинуть страницу?'
+            };
+
+            var globalMessages = window.cmsElementEditorMessages || {};
+            if (globalMessages.autosaveClean) {
+                defaults.clean = globalMessages.autosaveClean;
+            }
+            if (globalMessages.autosaveDirty) {
+                defaults.dirty = globalMessages.autosaveDirty;
+            }
+            if (globalMessages.autosaveSaving) {
+                defaults.saving = globalMessages.autosaveSaving;
+            }
+            if (globalMessages.autosaveSaved) {
+                defaults.saved = globalMessages.autosaveSaved;
+            }
+            if (globalMessages.autosaveError) {
+                defaults.error = globalMessages.autosaveError;
+            }
+            if (globalMessages.beforeUnload) {
+                defaults.beforeUnload = globalMessages.beforeUnload;
+            }
+
+            this.elementAutosaveMessagesCache = defaults;
+            return defaults;
+        },
+
+        updateElementAutosaveStatus: function (status, options) {
+            status = status || 'clean';
+            this.elementAutosaveStatus = status;
+
+            var messages = this.getElementAutosaveMessages();
+            var message = messages[status] || messages.clean || '';
+
+            var savedAt = options && options.savedAt;
+            if (status === 'saved') {
+                if (savedAt instanceof Date) {
+                    var formatted = this.formatAutosaveTimestamp(savedAt);
+                    if (message.indexOf('{time}') !== -1) {
+                        message = message.replace('{time}', formatted);
+                    } else if (formatted) {
+                        message += ' ' + formatted;
+                    }
+                } else {
+                    message = message.replace('{time}', '').trim();
+                }
+            }
+
+            if (!message) {
+                message = messages.clean || '';
+            }
+
+            var $status = this.getElementAutosaveStatusElement();
+            if (!$status.length) {
+                return;
+            }
+
+            $status
+                .attr('data-status', status)
+                .removeClass('text-muted text-warning text-info text-success text-danger');
+
+            if (status === 'dirty') {
+                $status.addClass('text-warning');
+            } else if (status === 'saving') {
+                $status.addClass('text-info');
+            } else if (status === 'saved') {
+                $status.addClass('text-success');
+            } else if (status === 'error') {
+                $status.addClass('text-danger');
+            } else {
+                $status.addClass('text-muted');
+            }
+
+            if (status === 'saved' && savedAt instanceof Date) {
+                $status.attr('title', this.formatAutosaveTimestamp(savedAt, true));
+            } else {
+                $status.removeAttr('title');
+            }
+
+            $status.text(message);
+        },
+
+        formatAutosaveTimestamp: function (date, includeDate) {
+            if (!(date instanceof Date)) {
+                return '';
+            }
+
+            try {
+                if (includeDate) {
+                    return date.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        second: '2-digit'
+                    });
+                }
+
+                return date.toLocaleTimeString('ru-RU', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                });
+            } catch (error) {
+                var pad = function (value) {
+                    value = String(value);
+                    return value.length < 2 ? '0' + value : value;
+                };
+
+                var hours = pad(date.getHours());
+                var minutes = pad(date.getMinutes());
+                var seconds = pad(date.getSeconds());
+
+                if (includeDate) {
+                    var day = pad(date.getDate());
+                    var month = pad(date.getMonth() + 1);
+                    var year = date.getFullYear();
+                    return day + '.' + month + '.' + year + ' ' + hours + ':' + minutes + ':' + seconds;
+                }
+
+                return hours + ':' + minutes + ':' + seconds;
+            }
+        },
+
+        isElementFormDirty: function () {
+            if (!this.elementAutosaveContainer || !this.elementAutosaveContainer.length) {
+                return false;
+            }
+
+            if (this.elementAutosaveDirty || this.elementAutosaveSaving) {
+                return true;
+            }
+
+            return this.elementAutosaveStatus === 'error';
         },
 
         initCollectionEntriesModule: function () {
@@ -3635,6 +4135,8 @@
             });
         }
     };
+
+    window.CMSDashboard = Dashboard;
 
     $(function () {
         Dashboard.init();

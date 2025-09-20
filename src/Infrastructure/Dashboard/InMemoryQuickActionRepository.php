@@ -21,17 +21,17 @@ final class InMemoryQuickActionRepository implements QuickActionRepositoryInterf
     {
         return [
             new QuickAction(
-                label: 'Новая запись',
-                description: 'Создать статью или новость',
-                url: '/dashboard/content/create',
-                icon: 'fa fa-plus-square',
+                label: 'Новая коллекция',
+                description: 'Создать структуру для материалов',
+                url: '/dashboard/collections/create',
+                icon: 'fa fa-folder-open',
                 htmlAttributes: ['class' => 'btn btn-primary btn-sm']
             ),
             new QuickAction(
-                label: 'Импорт материалов',
-                description: 'Запустить импорт из интеграций',
-                url: '/dashboard/import/start',
-                icon: 'fa fa-cloud-download',
+                label: 'Установить плагин',
+                description: 'Добавить расширение из каталога',
+                url: '/dashboard/plugins/install',
+                icon: 'fa fa-plug',
                 htmlAttributes: ['class' => 'btn btn-default btn-sm']
             ),
             new QuickAction(

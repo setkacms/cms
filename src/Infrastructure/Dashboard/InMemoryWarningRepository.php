@@ -21,18 +21,18 @@ final class InMemoryWarningRepository implements WarningRepositoryInterface
     {
         return [
             new Warning(
-                message: 'Не настроено резервное копирование базы данных.',
+                message: 'Не настроено хранилище для резервных копий.',
                 level: 'warning',
                 icon: 'fa fa-hdd-o',
                 actionLabel: 'Настроить',
-                actionUrl: '/dashboard/settings/backups'
+                actionUrl: '/dashboard/settings/storage'
             ),
             new Warning(
-                message: 'В очереди экспорта накопилось более 50 ошибок.',
+                message: 'В очереди фоновых задач накопилось более 50 ошибок.',
                 level: 'danger',
                 icon: 'fa fa-bug',
-                actionLabel: 'Открыть журнал',
-                actionUrl: '/dashboard/queue/errors'
+                actionLabel: 'Открыть очередь',
+                actionUrl: '/dashboard/system/queue'
             ),
         ];
     }

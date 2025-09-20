@@ -20,10 +20,10 @@ final class InMemoryMetricsRepository implements MetricsRepositoryInterface
     public function findAll(): array
     {
         return [
-            new Metric('entries', 'Всего записей', 286, '/dashboard/content/index', 'fa fa-newspaper-o', 'bg-aqua'),
-            new Metric('drafts', 'Драфты', 42, '/dashboard/content/index?status=draft', 'fa fa-pencil', 'bg-yellow'),
-            new Metric('review', 'На ревью', 8, '/dashboard/content/review', 'fa fa-comments', 'bg-green'),
-            new Metric('queue_errors', 'Ошибки очередей', 3, '/dashboard/queue/errors', 'fa fa-exclamation-triangle', 'bg-red'),
+            new Metric('entries', 'Всего записей', 286, '/dashboard/elements/index', 'fa fa-newspaper-o', 'bg-aqua'),
+            new Metric('drafts', 'Драфты', 42, '/dashboard/elements/drafts', 'fa fa-pencil', 'bg-yellow'),
+            new Metric('review', 'На ревью', 8, '/dashboard/collections/entries?handle=articles', 'fa fa-comments', 'bg-green'),
+            new Metric('queue_errors', 'Ошибки очередей', 3, '/dashboard/system/queue', 'fa fa-exclamation-triangle', 'bg-red'),
         ];
     }
 }

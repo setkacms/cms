@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 /*
  * This file is part of Setka CMS.
  *
@@ -8,6 +8,13 @@
 namespace Setka\Cms\Http\Dashboard;
 
 use RuntimeException;
+use Setka\Cms\Application\Elements\ElementVersionService;
+use Setka\Cms\Contracts\Elements\ElementRepositoryInterface;
+use Setka\Cms\Contracts\Elements\ElementVersionRepositoryInterface;
+use Setka\Cms\Contracts\Fields\FieldValueRepositoryInterface;
+use Setka\Cms\Contracts\Workflow\WorkflowRepositoryInterface;
+use Setka\Cms\Contracts\Workflow\WorkflowStateRepositoryInterface;
+use Setka\Cms\Contracts\Workflow\WorkflowTransitionRepositoryInterface;
 use Setka\Cms\Domain\Dashboard\ActivityRepositoryInterface;
 use Setka\Cms\Domain\Dashboard\MetricsRepositoryInterface;
 use Setka\Cms\Domain\Dashboard\QuickActionRepositoryInterface;
@@ -17,6 +24,12 @@ use Setka\Cms\Infrastructure\Dashboard\InMemoryActivityRepository;
 use Setka\Cms\Infrastructure\Dashboard\InMemoryMetricsRepository;
 use Setka\Cms\Infrastructure\Dashboard\InMemoryQuickActionRepository;
 use Setka\Cms\Infrastructure\Dashboard\InMemoryWarningRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\ElementRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\ElementVersionRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\FieldValueRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\WorkflowRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\WorkflowStateRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\WorkflowTransitionRepository;
 use Yii;
 use yii\base\Module as BaseModule;
 
@@ -79,6 +92,13 @@ class Module extends BaseModule
         $container->set(ActivityRepositoryInterface::class, InMemoryActivityRepository::class);
         $container->set(WarningRepositoryInterface::class, InMemoryWarningRepository::class);
         $container->set(QuickActionRepositoryInterface::class, InMemoryQuickActionRepository::class);
+        $container->set(FieldValueRepositoryInterface::class, FieldValueRepository::class);
+        $container->set(ElementVersionRepositoryInterface::class, ElementVersionRepository::class);
+        $container->set(ElementRepositoryInterface::class, ElementRepository::class);
+        $container->set(ElementVersionService::class, ElementVersionService::class);
+        $container->set(WorkflowRepositoryInterface::class, WorkflowRepository::class);
+        $container->set(WorkflowStateRepositoryInterface::class, WorkflowStateRepository::class);
+        $container->set(WorkflowTransitionRepositoryInterface::class, WorkflowTransitionRepository::class);
     }
 }
 

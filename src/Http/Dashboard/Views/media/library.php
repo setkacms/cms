@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use yii\helpers\Html;
+use yii\helpers\Url;
 
 /* @var $this yii\web\View */
 
@@ -10,7 +11,9 @@ $this->title = 'Медиатека';
 $this->params['breadcrumbs'][] = $this->title;
 ?>
 
-<div class="box box-primary" data-role="media-library">
+<div class="box box-primary"
+     data-role="media-library"
+     data-media-view-url-template="<?= Html::encode(Url::to(['view', 'id' => '__id__'])) ?>">
     <div class="box-header with-border">
         <h3 class="box-title">Библиотека файлов</h3>
         <div class="box-tools">

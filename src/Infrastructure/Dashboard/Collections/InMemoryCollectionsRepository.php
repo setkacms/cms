@@ -34,46 +34,46 @@ final class InMemoryCollectionsRepository
     private const COLLECTIONS = [
         [
             'id' => 1,
-            'name' => '����',
+            'name' => 'Статьи',
             'handle' => 'articles',
             'structure' => 'flat',
             'entries' => 128,
             'status' => 'published',
             'updated_at' => '2025-03-05 10:24:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
                 ['code' => 'en-US', 'label' => 'English'],
             ],
             'taxonomies' => [
                 [
                     'handle' => 'topics',
-                    'label' => '����',
+                    'label' => 'Темы',
                     'terms' => [
-                        ['slug' => 'analytics', 'name' => '�����⨪�'],
-                        ['slug' => 'marketing', 'name' => '��થ⨭�'],
-                        ['slug' => 'workflow', 'name' => '������'],
-                        ['slug' => 'culture', 'name' => '������'],
+                        ['slug' => 'analytics', 'name' => 'Аналитика'],
+                        ['slug' => 'marketing', 'name' => 'Маркетинг'],
+                        ['slug' => 'workflow', 'name' => 'Рабочие процессы'],
+                        ['slug' => 'culture', 'name' => 'Культура'],
                     ],
                 ],
                 [
                     'handle' => 'channels',
-                    'label' => '������',
+                    'label' => 'Каналы',
                     'terms' => [
-                        ['slug' => 'site', 'name' => '����'],
-                        ['slug' => 'magazine', 'name' => '��ୠ�'],
-                        ['slug' => 'newsletter', 'name' => '����뫪�'],
+                        ['slug' => 'site', 'name' => 'Сайт'],
+                        ['slug' => 'magazine', 'name' => 'Журнал'],
+                        ['slug' => 'newsletter', 'name' => 'Рассылка'],
                     ],
                 ],
             ],
             'fields' => [
-                ['handle' => 'author', 'label' => '����', 'type' => 'text'],
-                ['handle' => 'reading_time', 'label' => '�६� �⥭�� (���)', 'type' => 'number'],
-                ['handle' => 'promo', 'label' => '�஬�-�����ઠ', 'type' => 'boolean'],
+                ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                ['handle' => 'reading_time', 'label' => 'Время чтения (мин)', 'type' => 'number'],
+                ['handle' => 'promo', 'label' => 'Промо-блок', 'type' => 'boolean'],
             ],
             'entry_saved_views' => [
                 [
                     'id' => 'recent-publications',
-                    'name' => '������ �㡫���樨',
+                    'name' => 'Последние публикации',
                     'filters' => [
                         'statuses' => ['published'],
                         'updated_from' => '2025-03-01',
@@ -81,7 +81,7 @@ final class InMemoryCollectionsRepository
                 ],
                 [
                     'id' => 'drafts-ru',
-                    'name' => '��୮���� (RU)',
+                    'name' => 'Черновики (RU)',
                     'filters' => [
                         'statuses' => ['draft'],
                         'locales' => ['ru-RU'],
@@ -96,28 +96,28 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 2,
-            'name' => '������',
+            'name' => 'Новости',
             'handle' => 'news',
             'structure' => 'sequence',
             'entries' => 45,
             'status' => 'published',
             'updated_at' => '2025-03-06 08:05:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [
                 [
                     'handle' => 'regions',
-                    'label' => '�������',
+                    'label' => 'Регионы',
                     'terms' => [
-                        ['slug' => 'moscow', 'name' => '��᪢�'],
-                        ['slug' => 'spb', 'name' => '�����-������'],
-                        ['slug' => 'global', 'name' => '���'],
+                        ['slug' => 'moscow', 'name' => 'Москва'],
+                        ['slug' => 'spb', 'name' => 'Санкт-Петербург'],
+                        ['slug' => 'global', 'name' => 'Мир'],
                     ],
                 ],
             ],
             'fields' => [
-                ['handle' => 'author', 'label' => '����', 'type' => 'text'],
+                ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -128,35 +128,35 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 3,
-            'name' => '������',
+            'name' => 'Интервью',
             'handle' => 'interviews',
             'structure' => 'tree',
             'entries' => 12,
             'status' => 'draft',
             'updated_at' => '2025-02-27 14:40:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
                 ['code' => 'en-US', 'label' => 'English'],
             ],
             'taxonomies' => [
                 [
                     'handle' => 'topics',
-                    'label' => '����',
+                    'label' => 'Темы',
                     'terms' => [
-                        ['slug' => 'leadership', 'name' => '������⢮'],
-                        ['slug' => 'engineering', 'name' => '��������'],
-                        ['slug' => 'product', 'name' => '�த��'],
+                        ['slug' => 'leadership', 'name' => 'Лидерство'],
+                        ['slug' => 'engineering', 'name' => 'Инженерия'],
+                        ['slug' => 'product', 'name' => 'Продукт'],
                     ],
                 ],
             ],
             'fields' => [
-                ['handle' => 'author', 'label' => '����', 'type' => 'text'],
-                ['handle' => 'role', 'label' => '������⢠', 'type' => 'text'],
+                ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                ['handle' => 'role', 'label' => 'Должность', 'type' => 'text'],
             ],
             'entry_saved_views' => [
                 [
                     'id' => 'pending-review',
-                    'name' => '�� ���ᥩ',
+                    'name' => 'На проверке',
                     'filters' => [
                         'statuses' => ['review'],
                     ],
@@ -170,29 +170,29 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 4,
-            'name' => '�����',
+            'name' => 'События',
             'handle' => 'events',
             'structure' => 'calendar',
             'entries' => 23,
             'status' => 'draft',
             'updated_at' => '2025-03-02 09:00:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [
                 [
                     'handle' => 'types',
-                    'label' => '����',
+                    'label' => 'Типы',
                     'terms' => [
-                        ['slug' => 'webinar', 'name' => '����࠭��'],
-                        ['slug' => 'conference', 'name' => '����ᮢ���'],
-                        ['slug' => 'meetup', 'name' => '������'],
+                        ['slug' => 'webinar', 'name' => 'Вебинар'],
+                        ['slug' => 'conference', 'name' => 'Конференция'],
+                        ['slug' => 'meetup', 'name' => 'Митап'],
                     ],
                 ],
             ],
             'fields' => [
-                ['handle' => 'location', 'label' => '�����', 'type' => 'text'],
-                ['handle' => 'capacity', 'label' => '��᫥���', 'type' => 'number'],
+                ['handle' => 'location', 'label' => 'Место', 'type' => 'text'],
+                ['handle' => 'capacity', 'label' => 'Вместимость', 'type' => 'number'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -203,20 +203,20 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 5,
-            'name' => '����',
+            'name' => 'Отчёты',
             'handle' => 'reports',
             'structure' => 'flat',
             'entries' => 32,
             'status' => 'review',
             'updated_at' => '2025-02-20 16:20:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
                 ['code' => 'en-US', 'label' => 'English'],
             ],
             'taxonomies' => [],
             'fields' => [
-                ['handle' => 'author', 'label' => '����', 'type' => 'text'],
-                ['handle' => 'file', 'label' => '����', 'type' => 'asset'],
+                ['handle' => 'author', 'label' => 'Автор', 'type' => 'text'],
+                ['handle' => 'file', 'label' => 'Файл', 'type' => 'asset'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -227,18 +227,18 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 6,
-            'name' => '�஥���',
+            'name' => 'Проекты',
             'handle' => 'projects',
             'structure' => 'tree',
             'entries' => 8,
             'status' => 'draft',
             'updated_at' => '2025-01-21 11:15:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [],
             'fields' => [
-                ['handle' => 'owner', 'label' => '��������', 'type' => 'text'],
+                ['handle' => 'owner', 'label' => 'Ответственный', 'type' => 'text'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -249,18 +249,18 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 7,
-            'name' => '����',
+            'name' => 'Отзывы',
             'handle' => 'testimonials',
             'structure' => 'flat',
             'entries' => 64,
             'status' => 'published',
             'updated_at' => '2025-02-14 18:20:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [],
             'fields' => [
-                ['handle' => 'rating', 'label' => '�業��', 'type' => 'number'],
+                ['handle' => 'rating', 'label' => 'Оценка', 'type' => 'number'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -271,14 +271,14 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 8,
-            'name' => '���⭥��',
+            'name' => 'Партнёры',
             'handle' => 'partners',
             'structure' => 'flat',
             'entries' => 5,
             'status' => 'archived',
             'updated_at' => '2024-11-03 12:00:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [],
             'fields' => [],
@@ -291,28 +291,28 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 9,
-            'name' => '�������',
+            'name' => 'Подкаст',
             'handle' => 'podcast',
             'structure' => 'sequence',
             'entries' => 27,
             'status' => 'published',
             'updated_at' => '2025-03-07 07:45:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
                 ['code' => 'en-US', 'label' => 'English'],
             ],
             'taxonomies' => [
                 [
                     'handle' => 'hosts',
-                    'label' => '����騥',
+                    'label' => 'Ведущие',
                     'terms' => [
-                        ['slug' => 'anna', 'name' => '����'],
-                        ['slug' => 'sergey', 'name' => '��ࣥ�'],
+                        ['slug' => 'anna', 'name' => 'Анна'],
+                        ['slug' => 'sergey', 'name' => 'Сергей'],
                     ],
                 ],
             ],
             'fields' => [
-                ['handle' => 'duration', 'label' => '���⥫쭮��� (���)', 'type' => 'number'],
+                ['handle' => 'duration', 'label' => 'Продолжительность (мин)', 'type' => 'number'],
             ],
             'entry_saved_views' => [],
             'permissions' => [
@@ -323,18 +323,18 @@ final class InMemoryCollectionsRepository
         ],
         [
             'id' => 10,
-            'name' => '����-५���',
+            'name' => 'Пресс-кит',
             'handle' => 'press',
             'structure' => 'flat',
             'entries' => 14,
             'status' => 'draft',
             'updated_at' => '2025-02-25 13:05:00',
             'locales' => [
-                ['code' => 'ru-RU', 'label' => '���᪨�'],
+                ['code' => 'ru-RU', 'label' => 'Русский'],
             ],
             'taxonomies' => [],
             'fields' => [
-                ['handle' => 'contact', 'label' => '���⠪�', 'type' => 'text'],
+                ['handle' => 'contact', 'label' => 'Контакт', 'type' => 'text'],
             ],
             'entry_saved_views' => [],
             'permissions' => [

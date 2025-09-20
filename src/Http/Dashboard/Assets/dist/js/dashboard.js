@@ -2680,6 +2680,7 @@
             this.bindCollectionEntriesBulkActions();
             this.bindCollectionEntriesTree();
             this.bindCollectionEntriesColumnToggles();
+            this.bindCollectionEntriesActions();
 
             var $table = $('#collection-entries-table');
             if ($table.length && this.collectionEntriesTable && !$table.data('collectionEntriesEventsBound')) {
@@ -2688,6 +2689,81 @@
             }
 
             this.updateCollectionEntriesSelectionState();
+        },
+
+        bindCollectionEntriesActions: function () {
+            var self = this;
+
+            var buildEditUrl = function (handle, id) {
+                if (!handle || !id) {
+                    return '';
+                }
+
+                return '/dashboard/collections/' + encodeURIComponent(handle)
+                    + '/entries/' + encodeURIComponent(id) + '/edit';
+            };
+
+            $(document).on('click', '[data-action="collection-entry-create"]', function (event) {
+                event.preventDefault();
+
+                var handle = self.getCurrentCollectionHandle();
+                if (!handle) {
+                    return;
+                }
+
+                window.location.href = buildEditUrl(handle, 'new');
+            });
+
+            $(document).on('click', '[data-action="collection-entry-refresh"]', function (event) {
+                event.preventDefault();
+                self.reloadCollectionEntriesTable(false, true);
+            });
+
+            $(document).on('click', '[data-action="entries-open"]', function (event) {
+                event.preventDefault();
+
+                var handle = self.getCurrentCollectionHandle();
+                if (!handle) {
+                    return;
+                }
+
+                var selected = self.getSelectedEntries();
+                if (!selected.length) {
+                    return;
+                }
+
+                for (var i = 0; i < selected.length; i++) {
+                    var entry = selected[i];
+                    var id = String(entry.id || '');
+                    if (!id) {
+                        continue;
+                    }
+
+                    var url = buildEditUrl(handle, id);
+                    if (url) {
+                        window.open(url, '_blank');
+                    }
+                }
+            });
+
+            $(document).on('click', '[data-action="entries-edit"]', function (event) {
+                event.preventDefault();
+
+                var handle = self.getCurrentCollectionHandle();
+                if (!handle) {
+                    return;
+                }
+
+                var first = self.getFirstSelectedEntry();
+                if (!first || !first.id) {
+                    return;
+                }
+
+                var url = buildEditUrl(handle, first.id);
+                if (url) {
+                    window.location.href = url;
+                }
+            });
         },
 
         getCurrentCollectionHandle: function () {
@@ -2898,6 +2974,11 @@
             }
 
             return result;
+        },
+
+        getFirstSelectedEntry: function () {
+            var selected = this.getSelectedEntries();
+            return selected.length ? selected[0] : null;
         },
 
         getCollectionEntriesFilters: function () {

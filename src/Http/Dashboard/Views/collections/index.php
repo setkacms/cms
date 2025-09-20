@@ -23,7 +23,7 @@ $this->params['breadcrumbs'][] = $this->title;
                 <button type="button" class="btn btn-default" data-toggle="modal" data-target="#collections-import">
                     <i class="fa fa-upload"></i> Импорт
                 </button>
-                <button type="button" class="btn btn-default" data-action="export-collections">
+                <button type="button" class="btn btn-default" data-action="export-collections" data-target="#collections-export">
                     <i class="fa fa-download"></i> Экспорт
                 </button>
             </div>
@@ -153,6 +153,47 @@ $this->params['breadcrumbs'][] = $this->title;
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">Отмена</button>
                 <button type="button" class="btn btn-primary" data-action="start-import">Запустить импорт</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="collections-export" tabindex="-1" role="dialog" aria-labelledby="collections-export-label">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="collections-export-label">Экспорт коллекций</h4>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Сформируйте набор данных по выбранным коллекциям и скачайте файл или скопируйте результат для дальнейшей передачи.</p>
+                <div class="alert alert-warning" data-role="collections-export-empty" style="display: none;">
+                    <i class="fa fa-info-circle"></i> Выберите коллекции в таблице перед экспортом.
+                </div>
+                <div class="form-group">
+                    <label class="control-label" for="collections-export-format">Формат экспорта</label>
+                    <select class="form-control" id="collections-export-format" data-role="collections-export-format">
+                        <option value="json-pretty">JSON (читабельный)</option>
+                        <option value="json">JSON (компактный)</option>
+                        <option value="handles-list">Список handle (по одному в строке)</option>
+                    </select>
+                    <p class="help-block">Выберите формат, чтобы подготовить данные к скачиванию или копированию.</p>
+                </div>
+                <div class="form-group" data-role="collections-export-result-container">
+                    <label class="control-label" for="collections-export-result">Предпросмотр</label>
+                    <textarea class="form-control" id="collections-export-result" rows="8" readonly data-role="collections-export-result"></textarea>
+                    <p class="help-block" data-role="collections-export-meta"></p>
+                    <p class="help-block" data-role="collections-export-feedback"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" data-role="collections-export-download" download style="display: none;">
+                    <i class="fa fa-download"></i> Скачать файл
+                </a>
+                <button type="button" class="btn btn-default" data-action="collections-copy-export" disabled>
+                    <i class="fa fa-clipboard"></i> Копировать
+                </button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Закрыть</button>
             </div>
         </div>
     </div>

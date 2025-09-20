@@ -67,6 +67,9 @@ const Dashboard = {
         taxonomyCurrentIndex: {},
         taxonomySearchQuery: '',
         taxonomyStorageKey: 'dashboard.taxonomy.lastHandle',
+        taxonomySelection: {},
+        taxonomyExportFormat: 'json',
+        taxonomyExportScope: 'selected',
         workflowStatesDataset: [],
         workflowStatesPromise: null,
         workflowRolesDataset: [],
@@ -6907,6 +6910,9 @@ const Dashboard = {
 
             var self = this;
             this.getTaxonomyDataset().done(function (dataset) {
+                self.taxonomySelection = {};
+                self.taxonomyExportFormat = self.taxonomyExportFormat || 'json';
+                self.taxonomyExportScope = self.taxonomyExportScope || 'selected';
                 self.populateTaxonomyFilter($container, dataset);
 
                 var storedHandle = self.loadTaxonomyHandle();
@@ -7052,6 +7058,7 @@ const Dashboard = {
                 var value = $(this).val();
                 self.taxonomyCurrentHandle = String(value || '');
                 self.persistTaxonomyHandle(self.taxonomyCurrentHandle);
+                self.clearTaxonomySelection($container, { skipApply: true });
                 self.renderTaxonomyTree($container);
             });
 
@@ -7063,6 +7070,120 @@ const Dashboard = {
                     self.renderTaxonomyTree($container);
                 }, 200);
             });
+
+            $container.on('click', '[data-action="create-term"]', function (event) {
+                event.preventDefault();
+                self.openTaxonomyTermModal($container, null);
+            });
+
+            $container.on('click', '[data-action="open-export-modal"]', function (event) {
+                event.preventDefault();
+                self.openTaxonomyExportModal($container, 'selected');
+            });
+
+            $container.on('click', '[data-action="bulk-export-terms"]', function (event) {
+                event.preventDefault();
+                self.openTaxonomyExportModal($container, 'selected');
+            });
+
+            $container.on('click', '[data-action="bulk-delete-terms"]', function (event) {
+                event.preventDefault();
+                self.handleTaxonomyBulkDelete($container);
+            });
+
+            $container.on('click', '[data-action="clear-term-selection"]', function (event) {
+                event.preventDefault();
+                self.clearTaxonomySelection($container);
+            });
+
+            $container.on('change', '[data-action="select-all-terms"]', function () {
+                var checked = $(this).is(':checked');
+                self.toggleSelectAllVisibleTerms($container, checked);
+            });
+
+            $container.on('change', '[data-role="term-checkbox"]', function () {
+                var id = String($(this).attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                var checked = $(this).is(':checked');
+                self.setTaxonomyTermSelected(id, checked);
+                self.applySelectionToTree($container);
+                self.updateTaxonomySelectionState($container);
+            });
+
+            $container.on('click', '[data-role="term-node"]', function (event) {
+                if ($(event.target).closest('button, a, input, label, textarea, select').length) {
+                    return;
+                }
+
+                var id = String($(this).closest('[data-term-id]').attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                self.toggleTaxonomyTermSelection($container, id);
+            });
+
+            $container.on('click', '[data-action="edit-term"]', function (event) {
+                event.preventDefault();
+                var id = String($(this).attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                self.openTaxonomyTermModal($container, id);
+            });
+
+            $container.on('click', '[data-action="delete-term"]', function (event) {
+                event.preventDefault();
+                var id = String($(this).attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                self.deleteTaxonomyTerm($container, id, true);
+            });
+
+            var $termModal = $('#terms-editor');
+            if ($termModal.length && !$termModal.data('taxonomyTermModalBound')) {
+                $termModal.data('taxonomyTermModalBound', true);
+
+                $termModal.on('submit', '[data-role="term-form"]', function (event) {
+                    event.preventDefault();
+                    self.saveTaxonomyTerm($container, $(this));
+                });
+
+                $termModal.on('shown.bs.modal', function () {
+                    var $name = $(this).find('[data-role="term-name"]');
+                    window.setTimeout(function () {
+                        $name.trigger('focus');
+                    }, 50);
+                });
+
+                $termModal.on('hidden.bs.modal', function () {
+                    self.resetTaxonomyTermForm($(this));
+                });
+            }
+
+            var $exportModal = $('#terms-export');
+            if ($exportModal.length && !$exportModal.data('taxonomyExportModalBound')) {
+                $exportModal.data('taxonomyExportModalBound', true);
+
+                $exportModal.on('show.bs.modal', function () {
+                    self.prepareTaxonomyExportModal($container);
+                });
+
+                $exportModal.on('change', '[data-role="export-format"], [data-role="export-scope"]', function () {
+                    self.generateTaxonomyExport($container, false);
+                });
+
+                $exportModal.on('click', '[data-action="generate-export"]', function (event) {
+                    event.preventDefault();
+                    self.generateTaxonomyExport($container, true);
+                });
+            }
         },
 
         renderTaxonomyTree: function ($container) {
@@ -7084,7 +7205,8 @@ const Dashboard = {
             }
 
             this.taxonomyCurrentIndex = {};
-            this.buildTaxonomyIndex(taxonomy.terms || [], this.taxonomyCurrentIndex);
+            this.buildTaxonomyIndex(taxonomy.terms || [], this.taxonomyCurrentIndex, '', 0);
+            this.sanitizeTaxonomySelection();
 
             var filtered = this.filterTaxonomyTerms(taxonomy.terms || [], this.taxonomySearchQuery || '');
 
@@ -7101,6 +7223,8 @@ const Dashboard = {
 
             this.destroyTaxonomySortable();
             this.attachTaxonomySortable($container);
+            this.applySelectionToTree($container);
+            this.updateTaxonomySelectionState($container);
             this.renderTaxonomySummary($container, taxonomy, filtered);
         },
 
@@ -7146,9 +7270,26 @@ const Dashboard = {
                 $card.addClass('taxonomy-term-card--match');
             }
 
+            var isSelected = !!(this.taxonomySelection && this.taxonomySelection[term.id]);
+            if (isSelected) {
+                $card.addClass('taxonomy-term-card--selected');
+            }
+
             var $header = $('<div class="taxonomy-term-card__header"></div>');
             var $handle = $('<span class="taxonomy-term-card__handle" data-role="term-drag-handle"><i class="fa fa-bars"></i></span>');
             $header.append($handle);
+
+            var $selector = $('<span class="taxonomy-term-card__selector"></span>');
+            var $checkboxLabel = $('<label class="taxonomy-term-card__checkbox-label"></label>');
+            var $checkbox = $('<input type="checkbox" class="taxonomy-term-card__checkbox" data-role="term-checkbox">');
+            $checkbox.attr('data-term-id', term.id);
+            if (isSelected) {
+                $checkbox.prop('checked', true);
+            }
+            $checkboxLabel.append($checkbox);
+            $checkboxLabel.append($('<span class="sr-only"></span>').text('Выбрать термин'));
+            $selector.append($checkboxLabel);
+            $header.append($selector);
 
             var $labels = $('<div class="taxonomy-term-card__labels"></div>');
             $labels.append($('<strong class="taxonomy-term-card__title"></strong>').text(term.name || term.slug || term.id));
@@ -7160,6 +7301,16 @@ const Dashboard = {
             if (typeof term.usage !== 'undefined') {
                 $header.append($('<span class="badge taxonomy-term-card__badge"></span>').text(term.usage));
             }
+
+            var $actions = $('<div class="taxonomy-term-card__actions btn-group btn-group-xs"></div>');
+            var $editButton = $('<button type="button" class="btn btn-default btn-xs" data-action="edit-term" title="Редактировать"></button>');
+            $editButton.attr('data-term-id', term.id);
+            $editButton.append('<i class="fa fa-pencil"></i>');
+            var $deleteButton = $('<button type="button" class="btn btn-default btn-xs" data-action="delete-term" title="Удалить"></button>');
+            $deleteButton.attr('data-term-id', term.id);
+            $deleteButton.append('<i class="fa fa-trash"></i>');
+            $actions.append($editButton).append($deleteButton);
+            $header.append($actions);
 
             $card.append($header);
 
@@ -7264,15 +7415,20 @@ const Dashboard = {
             return result;
         },
 
-        buildTaxonomyIndex: function (terms, index) {
+        buildTaxonomyIndex: function (terms, index, parentId, depth) {
             var self = this;
-            $.each(terms, function (_, term) {
+            var level = typeof depth === 'number' ? depth : 0;
+
+            $.each(terms || [], function (_, term) {
                 if (!term || !term.id) {
                     return;
                 }
 
-                index[term.id] = $.extend(true, {}, term);
-                self.buildTaxonomyIndex(term.children || [], index);
+                var clone = $.extend(true, {}, term);
+                clone._parentId = parentId || '';
+                clone._depth = level;
+                index[term.id] = clone;
+                self.buildTaxonomyIndex(term.children || [], index, term.id, level + 1);
             });
         },
 
@@ -7330,7 +7486,906 @@ const Dashboard = {
                 message += ' Отфильтровано: ' + visible + '.';
             }
 
+            var selected = this.getSelectedTaxonomyTermIds().length;
+            if (selected) {
+                message += ' Выбрано: ' + selected + '.';
+            }
+
             $summary.text(message);
+        },
+
+        walkTaxonomyTerms: function (terms, callback, depth) {
+            var self = this;
+            var level = typeof depth === 'number' ? depth : 0;
+
+            $.each(terms || [], function (_, term) {
+                if (!term || !term.id) {
+                    return;
+                }
+
+                var proceed = callback(term, level);
+                if (proceed === false) {
+                    return;
+                }
+
+                self.walkTaxonomyTerms(term.children || [], callback, level + 1);
+            });
+        },
+
+        sanitizeTaxonomySelection: function () {
+            var index = this.taxonomyCurrentIndex || {};
+            var selection = this.taxonomySelection || {};
+            var changed = false;
+
+            $.each(selection, function (id) {
+                if (!Object.prototype.hasOwnProperty.call(index, id)) {
+                    delete selection[id];
+                    changed = true;
+                }
+            });
+
+            if (changed) {
+                this.taxonomySelection = selection;
+            }
+        },
+
+        isTaxonomyTermSelected: function (id) {
+            if (!id) {
+                return false;
+            }
+
+            return !!(this.taxonomySelection && this.taxonomySelection[String(id)]);
+        },
+
+        setTaxonomyTermSelected: function (id, state) {
+            var key = String(id || '');
+            if (!key) {
+                return;
+            }
+
+            var selection = this.taxonomySelection || {};
+            if (state) {
+                selection[key] = true;
+            } else if (Object.prototype.hasOwnProperty.call(selection, key)) {
+                delete selection[key];
+            }
+
+            this.taxonomySelection = selection;
+        },
+
+        toggleTaxonomyTermSelection: function ($container, id) {
+            var selected = !this.isTaxonomyTermSelected(id);
+            this.setTaxonomyTermSelected(id, selected);
+            this.applySelectionToTree($container);
+            this.updateTaxonomySelectionState($container);
+        },
+
+        applySelectionToTree: function ($container) {
+            var self = this;
+            var selection = this.taxonomySelection || {};
+
+            $container.find('[data-role="term-checkbox"]').each(function () {
+                var $checkbox = $(this);
+                var id = String($checkbox.attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                var selected = !!selection[id];
+                $checkbox.prop('checked', selected);
+                var $card = $checkbox.closest('[data-role="term-node"]');
+                if ($card.length) {
+                    $card.toggleClass('taxonomy-term-card--selected', selected);
+                }
+            });
+        },
+
+        updateTaxonomySelectionState: function ($container) {
+            var count = 0;
+            $.each(this.taxonomySelection || {}, function () {
+                count += 1;
+            });
+
+            var $counter = $container.find('[data-role="selection-counter"]');
+            if ($counter.length) {
+                $counter.text('Выбрано: ' + count);
+            }
+
+            var $bulkButton = $container.find('[data-role="bulk-action-button"]');
+            if ($bulkButton.length) {
+                if (count === 0) {
+                    $bulkButton.prop('disabled', true).addClass('disabled');
+                } else {
+                    $bulkButton.prop('disabled', false).removeClass('disabled');
+                }
+            }
+
+            this.syncSelectAllCheckbox($container);
+        },
+
+        syncSelectAllCheckbox: function ($container) {
+            var $selectAll = $container.find('[data-action="select-all-terms"]');
+            if (!$selectAll.length) {
+                return;
+            }
+
+            var $checkboxes = $container.find('[data-role="terms-tree"] [data-role="term-checkbox"]');
+            if (!$checkboxes.length) {
+                $selectAll.prop('checked', false).prop('indeterminate', false).prop('disabled', true);
+                return;
+            }
+
+            var totalVisible = 0;
+            var selectedVisible = 0;
+            var self = this;
+
+            $checkboxes.each(function () {
+                var id = String($(this).attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                totalVisible += 1;
+                if (self.isTaxonomyTermSelected(id)) {
+                    selectedVisible += 1;
+                }
+            });
+
+            $selectAll.prop('disabled', false);
+
+            if (selectedVisible === 0) {
+                $selectAll.prop('checked', false).prop('indeterminate', false);
+            } else if (selectedVisible === totalVisible) {
+                $selectAll.prop('checked', true).prop('indeterminate', false);
+            } else {
+                $selectAll.prop('checked', false).prop('indeterminate', true);
+            }
+        },
+
+        getSelectedTaxonomyTermIds: function () {
+            var ids = [];
+            $.each(this.taxonomySelection || {}, function (id, selected) {
+                if (selected) {
+                    ids.push(String(id));
+                }
+            });
+            return ids;
+        },
+
+        clearTaxonomySelection: function ($container, options) {
+            this.taxonomySelection = {};
+
+            if (!options || !options.skipApply) {
+                this.applySelectionToTree($container);
+            }
+
+            var $selectAll = $container.find('[data-action="select-all-terms"]');
+            if ($selectAll.length) {
+                $selectAll.prop('checked', false).prop('indeterminate', false);
+            }
+
+            this.updateTaxonomySelectionState($container);
+        },
+
+        toggleSelectAllVisibleTerms: function ($container, state) {
+            if (!state) {
+                this.clearTaxonomySelection($container);
+                return;
+            }
+
+            var self = this;
+            $container.find('[data-role="terms-tree"] [data-role="term-checkbox"]').each(function () {
+                var id = String($(this).attr('data-term-id') || '');
+                if (!id) {
+                    return;
+                }
+
+                self.setTaxonomyTermSelected(id, true);
+            });
+
+            this.applySelectionToTree($container);
+            this.updateTaxonomySelectionState($container);
+        },
+
+        generateTaxonomyTermId: function () {
+            return 'term-' + (new Date().getTime()) + '-' + Math.floor(Math.random() * 10000);
+        },
+
+        findTaxonomyTermInfo: function (taxonomy, id) {
+            if (!taxonomy || !taxonomy.terms) {
+                return null;
+            }
+
+            var target = String(id || '');
+            if (!target) {
+                return null;
+            }
+
+            var found = null;
+
+            var traverse = function (terms, parent) {
+                $.each(terms || [], function (index, term) {
+                    if (found) {
+                        return false;
+                    }
+
+                    if (!term || !term.id) {
+                        return true;
+                    }
+
+                    if (String(term.id) === target) {
+                        found = {
+                            term: term,
+                            parent: parent || null,
+                            collection: terms,
+                            index: index
+                        };
+                        return false;
+                    }
+
+                    traverse(term.children || [], term);
+                    if (found) {
+                        return false;
+                    }
+
+                    return true;
+                });
+            };
+
+            traverse(taxonomy.terms || [], null);
+
+            return found;
+        },
+
+        populateTaxonomyTermParentOptions: function ($modal, taxonomy, excludeId) {
+            if (!$modal || !$modal.length) {
+                return;
+            }
+
+            var $select = $modal.find('[data-role="term-parent"]');
+            if (!$select.length) {
+                return;
+            }
+
+            $select.empty();
+            $select.append($('<option value=""></option>').text('Корневой уровень'));
+
+            var excluded = String(excludeId || '');
+            var self = this;
+
+            this.walkTaxonomyTerms(taxonomy.terms || [], function (term, depth) {
+                if (excluded && String(term.id) === excluded) {
+                    return false;
+                }
+
+                var prefix = '';
+                if (depth > 0) {
+                    prefix = new Array(depth + 1).join('— ');
+                }
+
+                var label = (prefix ? prefix + ' ' : '') + (term.name || term.slug || term.id);
+                $select.append($('<option></option>').attr('value', term.id).text(label));
+            });
+        },
+
+        fillTaxonomyTermForm: function ($modal, info) {
+            if (!$modal || !$modal.length || !info || !info.term) {
+                return;
+            }
+
+            var term = info.term;
+            var $form = $modal.find('[data-role="term-form"]');
+
+            $form.find('[data-role="term-id"]').val(term.id);
+            $form.find('[data-role="term-name"]').val(term.name || '');
+            $form.find('[data-role="term-slug"]').val(term.slug || '');
+            $form.find('[data-role="term-description"]').val(term.description || '');
+
+            var parentId = info.parent && info.parent.id ? info.parent.id : '';
+            $form.find('[data-role="term-parent"]').val(parentId || '');
+        },
+
+        resetTaxonomyTermForm: function ($modal) {
+            var $context = $modal && $modal.length ? $modal : $('#terms-editor');
+            var $form = $context.find('[data-role="term-form"]');
+            if (!$form.length) {
+                return;
+            }
+
+            if ($form.get(0) && typeof $form.get(0).reset === 'function') {
+                $form.get(0).reset();
+            }
+
+            $form.find('[data-role="term-id"]').val('');
+            $form.find('[data-role="term-mode"]').val('create');
+            $form.find('[data-role="term-name"]').val('');
+            $form.find('[data-role="term-slug"]').val('');
+            $form.find('[data-role="term-description"]').val('');
+            $form.find('[data-role="term-parent"]').empty();
+
+            this.updateTaxonomyTermFormFeedback($form, '', null);
+        },
+
+        updateTaxonomyTermFormFeedback: function ($form, message, type) {
+            if (!$form || !$form.length) {
+                return;
+            }
+
+            var $feedback = $form.closest('.modal-content').find('[data-role="term-form-feedback"]');
+            if (!$feedback.length) {
+                return;
+            }
+
+            $feedback.removeClass('text-danger text-success');
+
+            if (type === 'error') {
+                $feedback.addClass('text-danger');
+            } else if (type === 'success') {
+                $feedback.addClass('text-success');
+            }
+
+            $feedback.text(message || '');
+        },
+
+        openTaxonomyTermModal: function ($container, termId) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                this.showTaxonomyFeedback($container, 'Выберите таксономию для работы с терминами.', 'error');
+                return;
+            }
+
+            var $modal = $('#terms-editor');
+            if (!$modal.length) {
+                return;
+            }
+
+            this.resetTaxonomyTermForm($modal);
+
+            var mode = termId ? 'edit' : 'create';
+            var $form = $modal.find('[data-role="term-form"]');
+            $form.find('[data-role="term-mode"]').val(mode);
+
+            this.populateTaxonomyTermParentOptions($modal, taxonomy, termId || '');
+
+            if (mode === 'edit') {
+                var info = this.findTaxonomyTermInfo(taxonomy, termId);
+                if (!info || !info.term) {
+                    this.showTaxonomyFeedback($container, 'Не удалось найти термин для редактирования.', 'error');
+                    return;
+                }
+
+                this.fillTaxonomyTermForm($modal, info);
+            }
+
+            this.updateTaxonomyTermFormFeedback($form, '', null);
+            var title = mode === 'edit' ? 'Редактирование термина' : 'Новый термин';
+            $modal.find('[data-role="term-modal-title"]').text(title);
+            $modal.modal('show');
+        },
+
+        createTaxonomyTerm: function (taxonomy, payload) {
+            if (!taxonomy || !payload || !payload.id) {
+                return null;
+            }
+
+            var term = {
+                id: payload.id,
+                slug: payload.slug || '',
+                name: payload.name || '',
+                description: payload.description || '',
+                usage: 0,
+                children: []
+            };
+
+            if (payload.parentId) {
+                var parentInfo = this.findTaxonomyTermInfo(taxonomy, payload.parentId);
+                if (parentInfo && parentInfo.term) {
+                    parentInfo.term.children = parentInfo.term.children || [];
+                    parentInfo.term.children.push(term);
+                } else {
+                    taxonomy.terms = taxonomy.terms || [];
+                    taxonomy.terms.push(term);
+                }
+            } else {
+                taxonomy.terms = taxonomy.terms || [];
+                taxonomy.terms.push(term);
+            }
+
+            return term;
+        },
+
+        updateTaxonomyTerm: function (taxonomy, payload) {
+            if (!taxonomy || !payload || !payload.id) {
+                return null;
+            }
+
+            var info = this.findTaxonomyTermInfo(taxonomy, payload.id);
+            if (!info || !info.term) {
+                return null;
+            }
+
+            info.term.name = payload.name || '';
+            info.term.slug = payload.slug || '';
+            info.term.description = payload.description || '';
+
+            var currentParentId = info.parent && info.parent.id ? info.parent.id : '';
+            var targetParentId = payload.parentId || '';
+            if (currentParentId !== targetParentId) {
+                info.collection.splice(info.index, 1);
+
+                if (targetParentId) {
+                    var parentInfo = this.findTaxonomyTermInfo(taxonomy, targetParentId);
+                    if (parentInfo && parentInfo.term) {
+                        parentInfo.term.children = parentInfo.term.children || [];
+                        parentInfo.term.children.push(info.term);
+                    } else {
+                        taxonomy.terms = taxonomy.terms || [];
+                        taxonomy.terms.push(info.term);
+                    }
+                } else {
+                    taxonomy.terms = taxonomy.terms || [];
+                    taxonomy.terms.push(info.term);
+                }
+            }
+
+            return info.term;
+        },
+
+        removeTaxonomyTerm: function (taxonomy, id) {
+            if (!taxonomy || !taxonomy.terms) {
+                return false;
+            }
+
+            var info = this.findTaxonomyTermInfo(taxonomy, id);
+            if (!info || !info.collection) {
+                return false;
+            }
+
+            info.collection.splice(info.index, 1);
+            return true;
+        },
+
+        saveTaxonomyTerm: function ($container, $form) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                this.showTaxonomyFeedback($container, 'Выберите таксономию для сохранения термина.', 'error');
+                return;
+            }
+
+            if (!$form || !$form.length) {
+                return;
+            }
+
+            var name = $.trim($form.find('[data-role="term-name"]').val() || '');
+            var slug = $.trim($form.find('[data-role="term-slug"]').val() || '');
+            var description = $.trim($form.find('[data-role="term-description"]').val() || '');
+            var parentId = $.trim($form.find('[data-role="term-parent"]').val() || '');
+            var mode = String($form.find('[data-role="term-mode"]').val() || 'create');
+            var id = $.trim($form.find('[data-role="term-id"]').val() || '');
+
+            if (!name) {
+                this.updateTaxonomyTermFormFeedback($form, 'Введите название термина.', 'error');
+                return;
+            }
+
+            if (!slug) {
+                slug = this.slugify(name);
+            }
+
+            if (!slug) {
+                slug = this.generateTaxonomyTermId();
+            }
+
+            if (mode === 'create' && !id) {
+                id = slug || this.generateTaxonomyTermId();
+            }
+
+            if (!id) {
+                this.updateTaxonomyTermFormFeedback($form, 'Не удалось определить идентификатор термина.', 'error');
+                return;
+            }
+
+            var payload = {
+                id: id,
+                name: name,
+                slug: slug,
+                description: description,
+                parentId: parentId
+            };
+
+            var result = null;
+            if (mode === 'edit') {
+                result = this.updateTaxonomyTerm(taxonomy, payload);
+            } else {
+                if (this.findTaxonomyTermInfo(taxonomy, payload.id)) {
+                    payload.id = payload.id + '-' + this.generateTaxonomyTermId();
+                }
+                result = this.createTaxonomyTerm(taxonomy, payload);
+            }
+
+            if (!result) {
+                this.updateTaxonomyTermFormFeedback($form, 'Не удалось сохранить термин.', 'error');
+                return;
+            }
+
+            this.updateTaxonomyTermFormFeedback($form, '', null);
+
+            var $modal = $form.closest('.modal');
+            if ($modal.length) {
+                $modal.modal('hide');
+            }
+
+            this.renderTaxonomyTree($container);
+            this.showTaxonomyFeedback($container, mode === 'edit' ? 'Термин обновлён.' : 'Термин добавлен.', 'success');
+        },
+
+        deleteTaxonomyTerm: function ($container, id, withConfirmation) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                return;
+            }
+
+            var termId = String(id || '');
+            if (!termId) {
+                return;
+            }
+
+            if (withConfirmation && !window.confirm('Удалить этот термин вместе с дочерними элементами?')) {
+                return;
+            }
+
+            var removed = this.removeTaxonomyTerm(taxonomy, termId);
+            if (!removed) {
+                this.showTaxonomyFeedback($container, 'Не удалось удалить термин.', 'error');
+                return;
+            }
+
+            this.setTaxonomyTermSelected(termId, false);
+            this.renderTaxonomyTree($container);
+            this.showTaxonomyFeedback($container, 'Термин удалён.', 'success');
+        },
+
+        handleTaxonomyBulkDelete: function ($container) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                return;
+            }
+
+            var ids = this.getSelectedTaxonomyTermIds();
+            if (!ids.length) {
+                this.showTaxonomyFeedback($container, 'Выберите термины для удаления.', 'error');
+                return;
+            }
+
+            if (!window.confirm('Удалить выбранные термины (' + ids.length + ')?')) {
+                return;
+            }
+
+            var self = this;
+            var items = $.map(ids, function (termId) {
+                var info = self.taxonomyCurrentIndex && self.taxonomyCurrentIndex[termId] ? self.taxonomyCurrentIndex[termId] : null;
+                var depth = info && typeof info._depth !== 'undefined' ? info._depth : 0;
+                return { id: termId, depth: depth };
+            });
+
+            items.sort(function (a, b) {
+                return b.depth - a.depth;
+            });
+
+            $.each(items, function (_, item) {
+                self.removeTaxonomyTerm(taxonomy, item.id);
+                self.setTaxonomyTermSelected(item.id, false);
+            });
+
+            self.renderTaxonomyTree($container);
+            self.showTaxonomyFeedback($container, 'Выбранные термины удалены.', 'success');
+        },
+
+        openTaxonomyExportModal: function ($container, scope) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                this.showTaxonomyFeedback($container, 'Выберите таксономию для экспорта.', 'error');
+                return;
+            }
+
+            var $modal = $('#terms-export');
+            if (!$modal.length) {
+                return;
+            }
+
+            var desiredScope = scope || this.taxonomyExportScope || 'selected';
+            if (desiredScope === 'selected' && !this.getSelectedTaxonomyTermIds().length) {
+                desiredScope = 'all';
+            }
+
+            this.taxonomyExportScope = desiredScope;
+            this.prepareTaxonomyExportModal($container);
+            $modal.modal('show');
+        },
+
+        prepareTaxonomyExportModal: function ($container) {
+            var $modal = $('#terms-export');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $format = $modal.find('[data-role="export-format"]');
+            if ($format.length) {
+                $format.val(this.taxonomyExportFormat || 'json');
+            }
+
+            var scope = this.taxonomyExportScope || 'selected';
+            var $scopes = $modal.find('[data-role="export-scope"]');
+            if ($scopes.length) {
+                var selectedIds = this.getSelectedTaxonomyTermIds();
+
+                $scopes.each(function () {
+                    var value = String($(this).val() || '');
+                    var checked = value === scope;
+                    $(this).prop('checked', checked);
+                });
+
+                var $selectedScope = $scopes.filter('[value="selected"]');
+                if (selectedIds.length === 0) {
+                    $selectedScope.prop('disabled', true);
+                    if ($selectedScope.is(':checked')) {
+                        $scopes.filter('[value="all"]').prop('checked', true);
+                        scope = 'all';
+                    }
+                } else {
+                    $selectedScope.prop('disabled', false);
+                }
+            }
+
+            this.taxonomyExportScope = scope;
+
+            var $output = $modal.find('[data-role="export-output"]');
+            if ($output.length) {
+                $output.val('');
+            }
+
+            var $feedback = $modal.find('[data-role="export-feedback"]');
+            if ($feedback.length) {
+                var selectedCount = this.getSelectedTaxonomyTermIds().length;
+                var message = scope === 'selected'
+                    ? 'Будут экспортированы выбранные термины (' + selectedCount + ').'
+                    : 'Будут экспортированы все термины текущей таксономии.';
+                $feedback.text(message);
+            }
+        },
+
+        collectExportTerms: function (taxonomy, scope) {
+            if (!taxonomy) {
+                return [];
+            }
+
+            var normalizedScope = String(scope || 'all');
+            if (normalizedScope === 'selected') {
+                var ids = this.getSelectedTaxonomyTermIds();
+                if (!ids.length) {
+                    return [];
+                }
+
+                var selectionMap = {};
+                $.each(ids, function (_, termId) {
+                    selectionMap[String(termId)] = true;
+                });
+
+                var result = [];
+                var self = this;
+                this.walkTaxonomyTerms(taxonomy.terms || [], function (term) {
+                    if (selectionMap[String(term.id)]) {
+                        result.push(self.cloneTaxonomyTerm(term));
+                        return false;
+                    }
+
+                    return true;
+                });
+
+                return result;
+            }
+
+            var copies = [];
+            var selfRef = this;
+            $.each(taxonomy.terms || [], function (_, term) {
+                if (!term || !term.id) {
+                    return;
+                }
+
+                copies.push(selfRef.cloneTaxonomyTerm(term));
+            });
+
+            return copies;
+        },
+
+        cloneTaxonomyTerm: function (term) {
+            if (!term) {
+                return null;
+            }
+
+            var self = this;
+            var clone = {
+                id: term.id,
+                slug: term.slug || '',
+                name: term.name || '',
+                description: term.description || '',
+                usage: typeof term.usage !== 'undefined' ? term.usage : 0,
+                children: []
+            };
+
+            $.each(term.children || [], function (_, child) {
+                var childClone = self.cloneTaxonomyTerm(child);
+                if (childClone) {
+                    clone.children.push(childClone);
+                }
+            });
+
+            return clone;
+        },
+
+        formatTaxonomyExportData: function (taxonomy, terms, format) {
+            var normalized = String(format || 'json').toLowerCase();
+            if (normalized === 'yaml') {
+                return this.formatTaxonomyTermsAsYaml(taxonomy, terms);
+            }
+            if (normalized === 'csv') {
+                return this.formatTaxonomyTermsAsCsv(taxonomy, terms);
+            }
+
+            return this.formatTaxonomyTermsAsJson(taxonomy, terms);
+        },
+
+        formatTaxonomyTermsAsJson: function (taxonomy, terms) {
+            var payload = {
+                taxonomy: taxonomy.handle || '',
+                name: taxonomy.name || '',
+                generatedAt: (new Date()).toISOString(),
+                terms: terms
+            };
+
+            try {
+                return JSON.stringify(payload, null, 2);
+            } catch (error) {
+                return JSON.stringify(payload);
+            }
+        },
+
+        formatTaxonomyTermsAsYaml: function (taxonomy, terms) {
+            var lines = [];
+            lines.push('taxonomy: ' + (taxonomy.handle || ''));
+            if (taxonomy.name) {
+                lines.push('name: ' + taxonomy.name);
+            }
+            lines.push('generated_at: ' + (new Date()).toISOString());
+            lines.push('terms:');
+
+            var append = function (items, level) {
+                $.each(items || [], function (_, term) {
+                    if (!term || !term.id) {
+                        return;
+                    }
+
+                    var indent = new Array(level + 1).join('  ');
+                    lines.push(indent + '- id: ' + term.id);
+                    lines.push(indent + '  name: ' + (term.name || ''));
+                    if (term.slug) {
+                        lines.push(indent + '  slug: ' + term.slug);
+                    }
+                    if (term.description) {
+                        lines.push(indent + '  description: ' + term.description);
+                    }
+                    if (typeof term.usage !== 'undefined') {
+                        lines.push(indent + '  usage: ' + term.usage);
+                    }
+                    if (term.children && term.children.length) {
+                        lines.push(indent + '  children:');
+                        append(term.children, level + 1);
+                    }
+                });
+            };
+
+            append(terms, 1);
+
+            if (lines.length === 4) {
+                lines.push('  []');
+            }
+
+            return lines.join('\n');
+        },
+
+        formatTaxonomyTermsAsCsv: function (taxonomy, terms) {
+            var rows = ['id,slug,name,parent_id,description,usage'];
+            var flat = [];
+            this.flattenTaxonomyTerms(terms, '', flat);
+
+            if (!flat.length) {
+                return rows.join('\n');
+            }
+
+            var self = this;
+            $.each(flat, function (_, item) {
+                rows.push([
+                    self.escapeCsv(item.id),
+                    self.escapeCsv(item.slug),
+                    self.escapeCsv(item.name),
+                    self.escapeCsv(item.parent),
+                    self.escapeCsv(item.description),
+                    String(item.usage)
+                ].join(','));
+            });
+
+            return rows.join('\n');
+        },
+
+        flattenTaxonomyTerms: function (terms, parentId, result) {
+            var self = this;
+            var list = result || [];
+
+            $.each(terms || [], function (_, term) {
+                if (!term || !term.id) {
+                    return;
+                }
+
+                list.push({
+                    id: String(term.id),
+                    slug: term.slug ? String(term.slug) : '',
+                    name: term.name ? String(term.name) : '',
+                    description: term.description ? String(term.description) : '',
+                    usage: typeof term.usage !== 'undefined' ? term.usage : 0,
+                    parent: parentId ? String(parentId) : ''
+                });
+
+                self.flattenTaxonomyTerms(term.children || [], term.id, list);
+            });
+
+            return list;
+        },
+
+        escapeCsv: function (value) {
+            var normalized = value === null || typeof value === 'undefined' ? '' : String(value);
+            var escaped = normalized.replace(/"/g, '""');
+            return '"' + escaped + '"';
+        },
+
+        generateTaxonomyExport: function ($container, showNotification) {
+            var taxonomy = this.findTaxonomyByHandle(this.taxonomyCurrentHandle);
+            if (!taxonomy) {
+                return;
+            }
+
+            var $modal = $('#terms-export');
+            if (!$modal.length) {
+                return;
+            }
+
+            var format = String($modal.find('[data-role="export-format"]').val() || 'json').toLowerCase();
+            var scope = String($modal.find('[data-role="export-scope"]:checked').val() || this.taxonomyExportScope || 'selected');
+
+            if (scope === 'selected' && !this.getSelectedTaxonomyTermIds().length) {
+                scope = 'all';
+            }
+
+            this.taxonomyExportFormat = format;
+            this.taxonomyExportScope = scope;
+
+            var terms = this.collectExportTerms(taxonomy, scope);
+            var output = this.formatTaxonomyExportData(taxonomy, terms, format);
+
+            var $output = $modal.find('[data-role="export-output"]');
+            if ($output.length) {
+                $output.val(output);
+            }
+
+            var $feedback = $modal.find('[data-role="export-feedback"]');
+            if ($feedback.length) {
+                var label = format.toUpperCase();
+                var scopeLabel = scope === 'selected' ? 'выбранным терминам' : 'всей таксономии';
+                $feedback.text('Сгенерированы данные в формате ' + label + ' по ' + scopeLabel + '.');
+            }
+
+            if (showNotification) {
+                this.showTaxonomyFeedback($container, 'Данные для экспорта подготовлены.', 'success');
+            }
         },
 
         showTaxonomyFeedback: function ($container, message, type) {

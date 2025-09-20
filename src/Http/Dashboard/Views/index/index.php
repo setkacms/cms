@@ -99,7 +99,9 @@ $this->params['breadcrumbs'][] = $this->title;
                                     <span class="info-box-icon bg-light-blue"><i class="<?= Html::encode($action->getIcon()) ?>"></i></span>
                                     <div class="info-box-content">
                                         <span class="info-box-text"><?= Html::encode($action->getLabel()) ?></span>
-                                        <span class="info-box-number text-muted small"><?= Html::encode($action->getDescription()) ?></span>
+                                        <span class="info-box-number text-muted small">
+                                            <?= Html::encode($action->getDescription()) ?>
+                                        </span>
                                         <?= Html::a('<i class="fa fa-arrow-right"></i> Запустить', $action->getUrl(), $options) ?>
                                     </div>
                                 </div>

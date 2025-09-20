@@ -7,18 +7,21 @@
 
 namespace Setka\Cms\Http\Dashboard\Assets;
 
+use Yii;
 use yii\web\AssetBundle;
 
 class DashboardAsset extends AssetBundle
 {
-    public $sourcePath = __DIR__ . '/dist';
+    public $sourcePath = __DIR__;
 
     public $css = [
-        'css/dashboard.css',
+        'dist/css/dashboard.css',
     ];
 
-    public $js = [
-        'js/dashboard.js',
+    public $js = [];
+
+    public $jsOptions = [
+        'type' => 'module',
     ];
 
     public $depends = [
@@ -87,6 +90,27 @@ class DashboardAsset extends AssetBundle
             ['codemirror.css'],
             ['codemirror.js', 'mode/javascript/javascript.js'],
             [\dmstr\web\AdminLteAsset::class]
+        );
+
+        $route = Yii::$app->controller->route ?? '';
+        if ($route === '') {
+            return;
+        }
+
+        $pageId = $route === 'index/index' ? 'dashboard' : str_replace('/', '.', $route);
+        $relativePath = $pageId === 'dashboard'
+            ? 'dist/js/dashboard.js'
+            : 'dist/js/pages/' . $pageId . '.js';
+
+        $absolutePath = $this->sourcePath . '/' . $relativePath;
+
+        if (!is_file($absolutePath)) {
+            return;
+        }
+
+        $view->registerJsFile(
+            $this->baseUrl . '/' . $relativePath,
+            ['type' => 'module', 'depends' => [static::class]]
         );
     }
 }

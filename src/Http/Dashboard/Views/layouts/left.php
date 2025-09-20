@@ -41,6 +41,11 @@ $menuItems = [
     ],
     '<li class="header">Контент</li>',
     [
+        'label' => '<i class="fa fa-file-text-o"></i> <span>Записи</span>',
+        'url' => Url::to(['/dashboard/entries/index']),
+        'active' => $inSection('dashboard/entries'),
+    ],
+    [
         'label' => '<i class="fa fa-folder-open"></i> <span>Коллекции</span>' . $caret,
         'url' => Url::to(['/dashboard/collections/index']),
         'options' => ['class' => 'treeview'],

@@ -273,6 +273,69 @@ h1, h2, h3, h4, h5, h6 {
   margin-top: 2px;
 }
 
+.media-library__toolbar .btn-group + .btn-group {
+  margin-left: 6px;
+}
+
+.media-library__bulk-group .btn {
+  font-weight: 600;
+}
+
+.media-library__bulk-group .btn.disabled,
+.media-library__bulk-group .btn:disabled {
+  opacity: 0.6;
+}
+
+.media-library__bulk-group .badge {
+  margin-left: 6px;
+  background-color: rgba(255, 255, 255, 0.85);
+  color: #66512c;
+}
+
+.media-library__item--deleted {
+  border-color: #dd4b39;
+  box-shadow: 0 0 0 1px rgba(221, 75, 57, 0.25);
+}
+
+.media-library__item--deleted .media-library__preview::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: rgba(221, 75, 57, 0.18);
+}
+
+.media-library__item--deleted .media-library__title,
+.media-library__item--deleted .media-library__list-title {
+  color: #a94442;
+}
+
+.media-library__status-label {
+  display: inline-block;
+  margin-bottom: 6px;
+}
+
+.media-bulk-modal__summary {
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.media-bulk-modal__content {
+  margin-top: 12px;
+}
+
+.media-bulk-modal__result {
+  margin-top: 16px;
+}
+
+.media-bulk-modal__result-list li {
+  padding: 2px 0;
+}
+
+.media-bulk-modal__danger {
+  margin-top: 12px;
+  margin-bottom: 16px;
+}
+
 .taxonomy-term-card {
   border: 1px solid #e3e6eb;
   border-radius: 4px;

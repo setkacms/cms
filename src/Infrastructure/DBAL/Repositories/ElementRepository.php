@@ -33,6 +33,7 @@ use Setka\Cms\Domain\Taxonomy\Taxonomy;
 use Setka\Cms\Domain\Taxonomy\TaxonomyStructure;
 use Setka\Cms\Domain\Taxonomy\Term;
 use Setka\Cms\Domain\Workspaces\Workspace;
+use Setka\Cms\Domain\Workflow\WorkflowStateType;
 use Throwable;
 use yii\db\Connection;
 use yii\db\Query;
@@ -98,6 +99,7 @@ final class ElementRepository implements ElementRepositoryInterface
                 'lft' => $collection->isTree() ? $element->getLeftBoundary() : null,
                 'rgt' => $collection->isTree() ? $element->getRightBoundary() : null,
                 'depth' => $collection->isTree() ? $element->getDepth() : null,
+                'workflow_state_id' => $element->getWorkflowStateId(),
                 'updated_at' => $timestamp,
             ];
 
@@ -177,6 +179,9 @@ final class ElementRepository implements ElementRepositoryInterface
 
         $status = $this->mapStatus($row['element_status'] ?? null);
         $publicationPlan = $this->decodePublicationPlan($row['element_publication_plan'] ?? null);
+        $workflowStateType = isset($row['workflow_state_type']) && $row['workflow_state_type'] !== null
+            ? WorkflowStateType::tryFrom((string) $row['workflow_state_type'])
+            : null;
 
         $element = new Element(
             collection: $collection,
@@ -193,6 +198,8 @@ final class ElementRepository implements ElementRepositoryInterface
             leftBoundary: isset($row['element_lft']) ? (int) $row['element_lft'] : null,
             rightBoundary: isset($row['element_rgt']) ? (int) $row['element_rgt'] : null,
             depth: isset($row['element_depth']) ? (int) $row['element_depth'] : null,
+            workflowStateId: isset($row['workflow_state_id']) ? (int) $row['workflow_state_id'] : null,
+            workflowStateType: $workflowStateType,
         );
 
         $locale = (string) $row['element_locale'];
@@ -234,6 +241,8 @@ final class ElementRepository implements ElementRepositoryInterface
                 'collection_default_schema_id' => 'c.default_schema_id',
                 'collection_url_rules' => 'c.url_rules',
                 'collection_publication_rules' => 'c.publication_rules',
+                'workflow_state_id' => 'ws.id',
+                'workflow_state_type' => 'ws.type',
                 'workspace_id' => 'w.id',
                 'workspace_uid' => 'w.uid',
                 'workspace_handle' => 'w.handle',
@@ -244,6 +253,7 @@ final class ElementRepository implements ElementRepositoryInterface
             ->from(['e' => '{{%element}}'])
             ->innerJoin(['c' => '{{%collection}}'], 'c.id = e.collection_id')
             ->innerJoin(['w' => '{{%workspace}}'], 'w.id = e.workspace_id')
+            ->leftJoin(['ws' => '{{%workflow_state}}'], 'ws.id = e.workflow_state_id')
             ->where([
                 'e.workspace_id' => $workspaceId,
                 'c.workspace_id' => $workspaceId,

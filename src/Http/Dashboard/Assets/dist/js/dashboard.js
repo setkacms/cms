@@ -40,6 +40,10 @@
         taxonomyCurrentIndex: {},
         taxonomySearchQuery: '',
         taxonomyStorageKey: 'dashboard.taxonomy.lastHandle',
+        workflowStatesDataset: [],
+        workflowStatesPromise: null,
+        workflowRolesDataset: [],
+        workflowTransitionsDataset: [],
         elementAutosaveContainer: null,
         elementAutosaveStatusElement: null,
         elementAutosaveTimer: null,
@@ -76,6 +80,7 @@
             this.initMediaLibraryModule();
             this.initTaxonomyTermsModule();
             this.initElementAutosaveModule();
+            this.initWorkflowModule();
         },
 
         initSelect2: function () {
@@ -5051,6 +5056,541 @@
             }
 
             $feedback.text(message || '');
+        },
+
+        getWorkflowStateTypeLabel: function (type) {
+            var map = {
+                draft: 'Черновик',
+                review: 'Ревью',
+                published: 'Публикация',
+                archived: 'Архив'
+            };
+
+            var key = String(type || 'draft');
+            return map[key] || map.draft;
+        },
+
+        initWorkflowModule: function () {
+            var $statesContainer = $('[data-role="workflow-states"]');
+            var $transitionsContainer = $('[data-role="workflow-transitions"]');
+
+            if ($statesContainer.length) {
+                this.bindWorkflowStatesModule($statesContainer);
+            }
+
+            if ($transitionsContainer.length) {
+                this.bindWorkflowTransitionsModule($transitionsContainer);
+            }
+        },
+
+        bindWorkflowStatesModule: function ($container) {
+            if ($container.data('statesModuleBound')) {
+                return;
+            }
+
+            var self = this;
+            var statesUrl = String($container.data('statesUrl') || '');
+
+            this.workflowStatesPromise = this.fetchWorkflowStates(statesUrl).done(function (payload) {
+                var items = payload && payload.items ? payload.items : [];
+                self.workflowStatesDataset = items;
+                self.renderWorkflowStates($container, items);
+                self.updateWorkflowStateOptions(items);
+            });
+
+            $container.on('click', '[data-action="open-state-modal"]', function (event) {
+                event.preventDefault();
+                self.openStateModal($container, null);
+            });
+
+            $container.on('click', '[data-action="edit-state"]', function (event) {
+                event.preventDefault();
+                var id = parseInt($(this).attr('data-id'), 10);
+                var state = self.findWorkflowStateById(id);
+                self.openStateModal($container, state || null);
+            });
+
+            $container.on('click', '[data-action="delete-state"]', function (event) {
+                event.preventDefault();
+                var id = parseInt($(this).attr('data-id'), 10);
+                if (!id) {
+                    return;
+                }
+
+                if (!window.confirm('Удалить этот статус?')) {
+                    return;
+                }
+
+                self.deleteWorkflowState($container, id);
+            });
+
+            $container.on('click', '[data-action="save-state"]', function (event) {
+                event.preventDefault();
+                self.saveWorkflowState($container);
+            });
+
+            var $list = $container.find('[data-role="states-list"]');
+            $list.on('states:reordered', function () {
+                self.reorderWorkflowStates($container);
+            });
+
+            $container.data('statesModuleBound', true);
+        },
+
+        fetchWorkflowStates: function (url) {
+            if (!url) {
+                return $.Deferred().resolve({ items: [] }).promise();
+            }
+
+            return $.getJSON(url);
+        },
+
+        renderWorkflowStates: function ($container, states) {
+            var $list = $container.find('[data-role="states-list"]');
+            var $empty = $container.find('[data-role="states-empty"]');
+            $list.empty();
+
+            if (!states || !states.length) {
+                $empty.removeClass('hidden');
+
+                return;
+            }
+
+            $empty.addClass('hidden');
+            var self = this;
+            $.each(states, function (_, state) {
+                $list.append(self.createWorkflowStateItem(state));
+            });
+        },
+
+        createWorkflowStateItem: function (state) {
+            var id = state && state.id ? state.id : '';
+            var name = state && state.name ? state.name : (state && state.handle ? state.handle : 'Статус');
+            var $item = $('<div class="list-group-item" data-state-id="' + id + '"></div>');
+            var $drag = $('<span class="state-handle"><i class="fa fa-bars"></i></span>');
+            var $title = $('<span class="state-title"></span>').text(name);
+            var $type = $('<span class="label label-default state-type"></span>').text(this.getWorkflowStateTypeLabel(state && state.type));
+            var $actions = $('<div class="btn-group btn-group-xs pull-right"></div>');
+            $actions.append('<button type="button" class="btn btn-default" data-action="edit-state" data-id="' + id + '"><i class="fa fa-pencil"></i></button>');
+            $actions.append('<button type="button" class="btn btn-default" data-action="delete-state" data-id="' + id + '"><i class="fa fa-trash"></i></button>');
+
+            $item.append($actions);
+            $item.append($drag);
+            $item.append($title);
+            $item.append('&nbsp;');
+            $item.append($type);
+
+            if (state && state.color) {
+                $item.css('borderLeft', '4px solid ' + state.color);
+            }
+
+            if (state && state.is_initial) {
+                $item.append(' <span class="label label-primary">Начальный</span>');
+            }
+
+            return $item;
+        },
+
+        findWorkflowStateById: function (id) {
+            var numericId = parseInt(id, 10);
+            if (isNaN(numericId)) {
+                return null;
+            }
+
+            var found = null;
+            $.each(this.workflowStatesDataset || [], function (_, state) {
+                if (!state) {
+                    return true;
+                }
+
+                if (parseInt(state.id, 10) === numericId) {
+                    found = state;
+
+                    return false;
+                }
+
+                return true;
+            });
+
+            return found;
+        },
+
+        openStateModal: function ($container, state) {
+            var $modal = $('#state-modal');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $form = $modal.find('[data-role="state-form"]');
+            $form.find('[data-role="state-id"]').val(state && state.id ? state.id : '');
+            $form.find('#state-name').val(state && state.name ? state.name : '');
+            $form.find('#state-handle').val(state && state.handle ? state.handle : '');
+            $form.find('#state-color').val(state && state.color ? state.color : '#3c8dbc');
+            var typeValue = state && state.type ? state.type : 'draft';
+            $form.find('#state-type').val(typeValue).trigger('change.select2');
+            $form.find('[data-role="state-initial"]').prop('checked', Boolean(state && state.is_initial));
+
+            var title = state && state.id ? 'Редактирование статуса' : 'Новый статус';
+            $modal.find('#state-modal-label').text(title);
+            $modal.modal('show');
+        },
+
+        closeStateModal: function () {
+            var $modal = $('#state-modal');
+            if ($modal.length) {
+                $modal.modal('hide');
+            }
+        },
+
+        saveWorkflowState: function ($container) {
+            var self = this;
+            var $modal = $('#state-modal');
+            var $form = $modal.find('[data-role="state-form"]');
+            var data = {
+                name: String($form.find('#state-name').val() || ''),
+                handle: String($form.find('#state-handle').val() || ''),
+                type: String($form.find('#state-type').val() || 'draft'),
+                color: String($form.find('#state-color').val() || '#3c8dbc'),
+                is_initial: $form.find('[data-role="state-initial"]').is(':checked') ? 1 : 0
+            };
+
+            var id = $form.find('[data-role="state-id"]').val();
+            var url;
+            if (id) {
+                url = String($container.data('updateUrl') || '');
+                url += url.indexOf('?') === -1 ? '?id=' + encodeURIComponent(id) : '&id=' + encodeURIComponent(id);
+            } else {
+                url = String($container.data('createUrl') || '');
+            }
+
+            if (!url) {
+                this.closeStateModal();
+
+                return;
+            }
+
+            $.post(url, data).done(function (response) {
+                self.closeStateModal();
+                var items = response && response.item ? [response.item] : null;
+                if (items) {
+                    self.workflowStatesDataset = self.workflowStatesDataset || [];
+                }
+                self.fetchWorkflowStates(String($container.data('statesUrl') || '')).done(function (payload) {
+                    var states = payload && payload.items ? payload.items : [];
+                    self.workflowStatesDataset = states;
+                    self.renderWorkflowStates($container, states);
+                    self.updateWorkflowStateOptions(states);
+                });
+            });
+        },
+
+        deleteWorkflowState: function ($container, id) {
+            var self = this;
+            var url = String($container.data('deleteUrl') || '');
+            if (!url) {
+                return;
+            }
+
+            url += url.indexOf('?') === -1 ? '?id=' + encodeURIComponent(id) : '&id=' + encodeURIComponent(id);
+            $.post(url).always(function () {
+                self.fetchWorkflowStates(String($container.data('statesUrl') || '')).done(function (payload) {
+                    var states = payload && payload.items ? payload.items : [];
+                    self.workflowStatesDataset = states;
+                    self.renderWorkflowStates($container, states);
+                    self.updateWorkflowStateOptions(states);
+                });
+            });
+        },
+
+        reorderWorkflowStates: function ($container) {
+            var url = String($container.data('reorderUrl') || '');
+            if (!url) {
+                return;
+            }
+
+            var ids = [];
+            $container.find('[data-role="states-list"] [data-state-id]').each(function () {
+                var id = parseInt($(this).attr('data-state-id'), 10);
+                if (id) {
+                    ids.push(id);
+                }
+            });
+
+            if (!ids.length) {
+                return;
+            }
+
+            $.post(url, { ids: ids });
+        },
+
+        updateWorkflowStateOptions: function (states) {
+            this.workflowStatesDataset = states || [];
+            var self = this;
+            var $from = $('[data-role="transition-from"]');
+            var $to = $('[data-role="transition-to"]');
+
+            $.each([$from, $to], function (_, $select) {
+                if (!$select.length) {
+                    return;
+                }
+
+                var current = $select.val();
+                $select.empty();
+                $.each(states || [], function (_, state) {
+                    if (!state || state.id === undefined) {
+                        return;
+                    }
+
+                    var label = (state.name || state.handle || 'Статус') + ' (' + self.getWorkflowStateTypeLabel(state.type) + ')';
+                    $select.append($('<option></option>').attr('value', state.id).text(label));
+                });
+
+                if (current) {
+                    $select.val(current);
+                }
+
+                $select.trigger('change.select2');
+            });
+        },
+
+        bindWorkflowTransitionsModule: function ($container) {
+            if ($container.data('transitionsModuleBound')) {
+                return;
+            }
+
+            var self = this;
+            var transitionsUrl = String($container.data('transitionsUrl') || '');
+
+            var loadTransitions = function () {
+                self.fetchWorkflowTransitions(transitionsUrl).done(function (payload) {
+                    var items = payload && payload.items ? payload.items : [];
+                    self.workflowTransitionsDataset = items;
+                    self.workflowRolesDataset = payload && payload.roles ? payload.roles : self.workflowRolesDataset;
+                    self.renderWorkflowTransitions($container, items);
+                    self.populateTransitionRolesSelect(self.workflowRolesDataset);
+                });
+            };
+
+            if (this.workflowStatesPromise) {
+                this.workflowStatesPromise.always(function () {
+                    loadTransitions();
+                });
+            } else {
+                loadTransitions();
+            }
+
+            $container.on('click', '[data-action="open-transition-modal"]', function (event) {
+                event.preventDefault();
+                self.openTransitionModal($container, null);
+            });
+
+            $container.on('click', '[data-action="edit-transition"]', function (event) {
+                event.preventDefault();
+                var id = parseInt($(this).attr('data-id'), 10);
+                var transition = self.findWorkflowTransitionById(id);
+                self.openTransitionModal($container, transition || null);
+            });
+
+            $container.on('click', '[data-action="delete-transition"]', function (event) {
+                event.preventDefault();
+                var id = parseInt($(this).attr('data-id'), 10);
+                if (!id) {
+                    return;
+                }
+
+                if (!window.confirm('Удалить этот переход?')) {
+                    return;
+                }
+
+                self.deleteWorkflowTransition($container, id);
+            });
+
+            $container.on('click', '[data-action="save-transition"]', function (event) {
+                event.preventDefault();
+                self.saveWorkflowTransition($container);
+            });
+
+            $container.data('transitionsModuleBound', true);
+        },
+
+        fetchWorkflowTransitions: function (url) {
+            if (!url) {
+                return $.Deferred().resolve({ items: [] }).promise();
+            }
+
+            return $.getJSON(url);
+        },
+
+        renderWorkflowTransitions: function ($container, transitions) {
+            var $body = $container.find('[data-role="transitions-body"]');
+            var $empty = $container.find('[data-role="transition-empty"]');
+            $body.find('tr').not($empty).remove();
+
+            if (!transitions || !transitions.length) {
+                $empty.removeClass('hidden');
+
+                return;
+            }
+
+            $empty.addClass('hidden');
+            var self = this;
+            $.each(transitions, function (_, transition) {
+                $body.append(self.createWorkflowTransitionRow(transition));
+            });
+        },
+
+        createWorkflowTransitionRow: function (transition) {
+            var id = transition && transition.id ? transition.id : '';
+            var fromState = transition && transition.from ? transition.from : null;
+            var toState = transition && transition.to ? transition.to : null;
+            var roles = this.formatWorkflowRoles(transition && transition.roles ? transition.roles : []);
+
+            var $row = $('<tr data-transition-id="' + id + '"></tr>');
+            $row.append('<td>' + this.escapeHtml(fromState && fromState.name ? fromState.name : (fromState && fromState.handle ? fromState.handle : '—')) + '</td>');
+            $row.append('<td class="hidden-xs">' + this.escapeHtml(toState && toState.name ? toState.name : (toState && toState.handle ? toState.handle : '—')) + '</td>');
+            $row.append('<td class="hidden-xs">' + roles + '</td>');
+            var $actions = $('<td class="text-right"></td>');
+            $actions.append('<div class="btn-group btn-group-xs"><button type="button" class="btn btn-default" data-action="edit-transition" data-id="' + id + '"><i class="fa fa-pencil"></i></button><button type="button" class="btn btn-default" data-action="delete-transition" data-id="' + id + '"><i class="fa fa-trash"></i></button></div>');
+            $row.append($actions);
+
+            return $row;
+        },
+
+        findWorkflowTransitionById: function (id) {
+            var numericId = parseInt(id, 10);
+            if (isNaN(numericId)) {
+                return null;
+            }
+
+            var found = null;
+            $.each(this.workflowTransitionsDataset || [], function (_, transition) {
+                if (!transition) {
+                    return true;
+                }
+
+                if (parseInt(transition.id, 10) === numericId) {
+                    found = transition;
+
+                    return false;
+                }
+
+                return true;
+            });
+
+            return found;
+        },
+
+        openTransitionModal: function ($container, transition) {
+            var $modal = $('#transition-modal');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $form = $modal.find('[data-role="transition-form"]');
+            $form.find('[data-role="transition-id"]').val(transition && transition.id ? transition.id : '');
+
+            if (!this.workflowStatesDataset || !this.workflowStatesDataset.length) {
+                this.updateWorkflowStateOptions(this.workflowStatesDataset || []);
+            }
+
+            $form.find('[data-role="transition-from"]').val(transition && transition.from ? transition.from.id : '').trigger('change.select2');
+            $form.find('[data-role="transition-to"]').val(transition && transition.to ? transition.to.id : '').trigger('change.select2');
+            this.populateTransitionRolesSelect(this.workflowRolesDataset || []);
+            $form.find('[data-role="transition-roles"]').val(transition && transition.roles ? transition.roles : []).trigger('change.select2');
+            $form.find('#transition-name').val(transition && transition.name ? transition.name : '');
+
+            var title = transition && transition.id ? 'Редактирование перехода' : 'Новый переход';
+            $modal.find('#transition-modal-label').text(title);
+            $modal.modal('show');
+        },
+
+        populateTransitionRolesSelect: function (roles) {
+            var $select = $('[data-role="transition-roles"]');
+            if (!$select.length) {
+                return;
+            }
+
+            var current = $select.val();
+            $select.empty();
+            $.each(roles || [], function (_, role) {
+                if (!role) {
+                    return;
+                }
+
+                $select.append($('<option></option>').attr('value', role).text(role));
+            });
+
+            if (current) {
+                $select.val(current);
+            }
+
+            $select.trigger('change.select2');
+        },
+
+        saveWorkflowTransition: function ($container) {
+            var self = this;
+            var $modal = $('#transition-modal');
+            var $form = $modal.find('[data-role="transition-form"]');
+            var id = $form.find('[data-role="transition-id"]').val();
+            var data = {
+                name: String($form.find('#transition-name').val() || ''),
+                from_state_id: $form.find('[data-role="transition-from"]').val(),
+                to_state_id: $form.find('[data-role="transition-to"]').val(),
+                roles: $form.find('[data-role="transition-roles"]').val() || []
+            };
+
+            var url;
+            if (id) {
+                url = String($container.data('updateUrl') || '');
+                url += url.indexOf('?') === -1 ? '?id=' + encodeURIComponent(id) : '&id=' + encodeURIComponent(id);
+            } else {
+                url = String($container.data('createUrl') || '');
+            }
+
+            if (!url) {
+                $modal.modal('hide');
+
+                return;
+            }
+
+            $.post(url, data).done(function () {
+                $modal.modal('hide');
+                self.fetchWorkflowTransitions(String($container.data('transitionsUrl') || '')).done(function (payload) {
+                    var items = payload && payload.items ? payload.items : [];
+                    self.workflowTransitionsDataset = items;
+                    self.renderWorkflowTransitions($container, items);
+                    self.populateTransitionRolesSelect(payload && payload.roles ? payload.roles : self.workflowRolesDataset || []);
+                });
+            });
+        },
+
+        deleteWorkflowTransition: function ($container, id) {
+            var self = this;
+            var url = String($container.data('deleteUrl') || '');
+            if (!url) {
+                return;
+            }
+
+            url += url.indexOf('?') === -1 ? '?id=' + encodeURIComponent(id) : '&id=' + encodeURIComponent(id);
+            $.post(url).always(function () {
+                self.fetchWorkflowTransitions(String($container.data('transitionsUrl') || '')).done(function (payload) {
+                    var items = payload && payload.items ? payload.items : [];
+                    self.workflowTransitionsDataset = items;
+                    self.renderWorkflowTransitions($container, items);
+                    self.populateTransitionRolesSelect(payload && payload.roles ? payload.roles : self.workflowRolesDataset || []);
+                });
+            });
+        },
+
+        formatWorkflowRoles: function (roles) {
+            if (!roles || !roles.length) {
+                return 'Все роли';
+            }
+
+            var self = this;
+            return $.map(roles, function (role) {
+                return self.escapeHtml(role);
+            }).join(', ');
         },
 
         findTaxonomyByHandle: function (handle) {

@@ -29,6 +29,8 @@ use Setka\Cms\Domain\Fields\Field;
 use Setka\Cms\Domain\Schemas\Schema;
 use Setka\Cms\Domain\Taxonomy\Taxonomy;
 use Setka\Cms\Domain\Taxonomy\Term;
+use Setka\Cms\Domain\Workflow\WorkflowState;
+use Setka\Cms\Domain\Workflow\WorkflowStateType;
 use function sprintf;
 
 final class Element implements ElementInterface
@@ -80,6 +82,12 @@ final class Element implements ElementInterface
 
     private DateTimeImmutable $updatedAt;
 
+    private ?int $workflowStateId;
+
+    private ?WorkflowStateType $workflowStateType;
+
+    private ?WorkflowState $workflowState = null;
+
     public function __construct(
         Collection $collection,
         string $locale,
@@ -94,7 +102,9 @@ final class Element implements ElementInterface
         int $position = 0,
         ?int $leftBoundary = null,
         ?int $rightBoundary = null,
-        ?int $depth = null
+        ?int $depth = null,
+        ?int $workflowStateId = null,
+        ?WorkflowStateType $workflowStateType = null
     ) {
         $this->collection = $collection;
         $this->locale = $this->assertLocale($locale);
@@ -109,6 +119,8 @@ final class Element implements ElementInterface
             $this->initialiseTreeState($parentId, $position, $leftBoundary, $rightBoundary, $depth);
         $this->createdAt = new DateTimeImmutable();
         $this->updatedAt = new DateTimeImmutable();
+        $this->workflowStateId = $workflowStateId;
+        $this->workflowStateType = $workflowStateType;
     }
 
     public function markPersisted(
@@ -364,8 +376,83 @@ final class Element implements ElementInterface
         return $this->status;
     }
 
+    public function getWorkflowState(): ?WorkflowState
+    {
+        return $this->workflowState;
+    }
+
+    public function getWorkflowStateId(): ?int
+    {
+        if ($this->workflowState !== null) {
+            return $this->workflowState->getId();
+        }
+
+        return $this->workflowStateId;
+    }
+
+    public function getWorkflowStateType(): ?WorkflowStateType
+    {
+        if ($this->workflowState !== null) {
+            return $this->workflowState->getType();
+        }
+
+        return $this->workflowStateType;
+    }
+
+    public function setWorkflowState(?WorkflowState $state): void
+    {
+        if ($state === null) {
+            $this->workflowState = null;
+            $this->setWorkflowStateId(null, null);
+
+            return;
+        }
+
+        $stateId = $state->getId();
+        if ($stateId === null) {
+            throw new InvalidArgumentException('Workflow state must be persisted before assigning to an element.');
+        }
+
+        $this->workflowState = $state;
+        $this->workflowStateId = $stateId;
+        $this->workflowStateType = $state->getType();
+        $this->touch();
+    }
+
+    public function setWorkflowStateId(?int $workflowStateId, ?WorkflowStateType $type = null): void
+    {
+        $currentType = $this->getWorkflowStateType();
+        if ($this->workflowStateId === $workflowStateId && ($type === null || $currentType === $type)) {
+            return;
+        }
+
+        $this->hydrateWorkflowState($workflowStateId, $type ?? ($workflowStateId === null ? null : $currentType));
+        $this->touch();
+    }
+
+    public function hydrateWorkflowState(?int $workflowStateId, ?WorkflowStateType $type): void
+    {
+        $this->workflowState = null;
+        $this->workflowStateId = $workflowStateId;
+        $this->workflowStateType = $type;
+    }
+
+    public function canPublish(): bool
+    {
+        $type = $this->getWorkflowStateType();
+        if ($type === null) {
+            return true;
+        }
+
+        return $type->allowsPublication();
+    }
+
     public function publish(?string $locale = null, ?int $version = null): void
     {
+        if (!$this->canPublish()) {
+            throw new RuntimeException('Элемент нельзя опубликовать в текущем состоянии рабочего процесса.');
+        }
+
         $versionInstance = $this->resolveVersion($locale, $version);
         if ($versionInstance === null) {
             throw new RuntimeException('Unable to publish without a prepared version.');

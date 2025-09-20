@@ -24,22 +24,22 @@ final class InMemoryActivityRepository implements ActivityRepositoryInterface
             new Activity(
                 id: 1,
                 title: 'Опубликована статья «10 трендов медиа 2025»',
-                description: 'Материал отправлен в продакшн и опубликован в разделе «Новости».',
+                description: 'Материал отправлен в продакшн и опубликован в коллекции «Статьи».',
                 happenedAt: new DateTimeImmutable('-2 hours'),
                 author: 'Анна Иванова',
                 type: 'publish',
                 icon: 'fa fa-upload',
-                url: '/dashboard/content/view?id=1051'
+                url: '/dashboard/collections/entries?handle=articles'
             ),
             new Activity(
                 id: 2,
                 title: 'Запрошено ревью «Гид по стилям»',
-                description: 'Редактор запросил проверку у выпускающего редактора.',
+                description: 'Редактор запросил проверку у выпускающего редактора в коллекции «Интервью».',
                 happenedAt: new DateTimeImmutable('-4 hours'),
                 author: 'Борис Юрченко',
                 type: 'review',
                 icon: 'fa fa-search',
-                url: '/dashboard/content/review?id=204'
+                url: '/dashboard/collections/entries?handle=interviews'
             ),
             new Activity(
                 id: 3,
@@ -53,13 +53,13 @@ final class InMemoryActivityRepository implements ActivityRepositoryInterface
             ),
             new Activity(
                 id: 4,
-                title: 'План публикации обновлён',
-                description: 'В расписание добавлено 3 черновика на следующую неделю.',
+                title: 'План публикаций «Новости» обновлён',
+                description: 'В расписание раздела «Новости» добавлено 3 черновика на следующую неделю.',
                 happenedAt: new DateTimeImmutable('-1 day'),
                 author: 'Сергей Лебедев',
                 type: 'schedule',
                 icon: 'fa fa-calendar-check-o',
-                url: '/dashboard/content/calendar'
+                url: '/dashboard/collections/entries?handle=news'
             ),
             new Activity(
                 id: 5,
@@ -69,7 +69,7 @@ final class InMemoryActivityRepository implements ActivityRepositoryInterface
                 author: 'Система',
                 type: 'queue',
                 icon: 'fa fa-exclamation-circle',
-                url: '/dashboard/queue/errors'
+                url: '/dashboard/system/queue'
             ),
         ];
 

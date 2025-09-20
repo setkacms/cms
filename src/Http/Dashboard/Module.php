@@ -84,6 +84,7 @@ class Module extends BaseModule
                 'dashboard/entries' => 'dashboard/entries/index',
                 'dashboard/entries/data' => 'dashboard/entries/data',
                 'dashboard/collections/<handle:[A-Za-z0-9\-_]+>/entries/<id:[^/]+>/edit' => 'dashboard/entries/edit',
+                'dashboard/media/<id:[^/]+>/view' => 'dashboard/media/view',
                 'dashboard/elements/<id:[^/]+>/preview' => 'dashboard/elements/preview',
                 'dashboard/elements/<id:[^/]+>/history' => 'dashboard/elements/history',
                 'dashboard/schemas/create' => 'dashboard/schemas/create',

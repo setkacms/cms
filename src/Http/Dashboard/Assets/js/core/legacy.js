@@ -61,6 +61,7 @@ const Dashboard = {
         mediaLibraryFilters: null,
         mediaLibrarySelection: [],
         mediaLibraryViewMode: 'grid',
+        mediaViewUrlTemplate: '',
         taxonomyDataset: null,
         taxonomyCurrentHandle: '',
         taxonomySortableInstances: [],
@@ -6205,6 +6206,8 @@ const Dashboard = {
                 $library.data('mediaLibraryInitialized', true);
             }
 
+            this.mediaViewUrlTemplate = String($library.data('mediaViewUrlTemplate') || '').replace(/&amp;/g, '&');
+
             this.getMediaAssets().done(function (assets) {
                 self.mediaLibraryFilters = {
                     search: '',
@@ -6244,7 +6247,11 @@ const Dashboard = {
                     collection: 'articles',
                     collectionName: 'Статьи',
                     tags: ['editorial', 'workflow'],
-                    createdAt: '2025-03-08T10:15:00+03:00'
+                    description: 'Динамичный снимок рабочей команды для презентаций и внутренних отчётов.',
+                    alt: 'Команда за работой в редакции',
+                    source: 'Внутренний фотобанк',
+                    createdAt: '2025-03-08T10:15:00+03:00',
+                    updatedAt: '2025-03-08T11:20:00+03:00'
                 },
                 {
                     id: 'asset-502',
@@ -6260,7 +6267,11 @@ const Dashboard = {
                     collection: 'news',
                     collectionName: 'Новости',
                     tags: ['promo', 'homepage'],
-                    createdAt: '2025-02-21T08:50:00+03:00'
+                    description: 'Основной промо-баннер весенней кампании для главной страницы сайта.',
+                    alt: 'Весенний промо-баннер',
+                    source: 'Маркетинговый отдел',
+                    createdAt: '2025-02-21T08:50:00+03:00',
+                    updatedAt: '2025-03-01T09:10:00+03:00'
                 },
                 {
                     id: 'asset-503',
@@ -6275,7 +6286,11 @@ const Dashboard = {
                     collection: 'interviews',
                     collectionName: 'Интервью',
                     tags: ['branding', 'events'],
-                    createdAt: '2025-03-02T12:00:00+03:00'
+                    description: 'Видеоролик с историей бренда, используемый для внешних анонсов и презентаций.',
+                    alt: 'Превью ролика Brand story',
+                    source: 'PR-команда',
+                    createdAt: '2025-03-02T12:00:00+03:00',
+                    updatedAt: '2025-03-05T14:00:00+03:00'
                 },
                 {
                     id: 'asset-504',
@@ -6287,7 +6302,11 @@ const Dashboard = {
                     collection: 'articles',
                     collectionName: 'Статьи',
                     tags: ['workflow', 'guideline'],
-                    createdAt: '2025-01-16T14:35:00+03:00'
+                    description: 'PDF-руководство с обновлёнными правилами и стандартами работы редакции.',
+                    alt: 'Редакторский гайд 2025',
+                    source: 'Редакционный отдел',
+                    createdAt: '2025-01-16T14:35:00+03:00',
+                    updatedAt: '2025-02-01T10:05:00+03:00'
                 },
                 {
                     id: 'asset-505',
@@ -6300,7 +6319,11 @@ const Dashboard = {
                     collection: 'articles',
                     collectionName: 'Статьи',
                     tags: ['podcast', 'audio'],
-                    createdAt: '2025-02-10T18:05:00+03:00'
+                    description: 'Короткий аудиотрек для заставки корпоративного подкаста.',
+                    alt: 'Аудиофайл podcast intro',
+                    source: 'Звукорежиссёр студии',
+                    createdAt: '2025-02-10T18:05:00+03:00',
+                    updatedAt: '2025-02-15T12:45:00+03:00'
                 },
                 {
                     id: 'asset-506',
@@ -6316,7 +6339,11 @@ const Dashboard = {
                     collection: 'articles',
                     collectionName: 'Статьи',
                     tags: ['newsletter', 'promo'],
-                    createdAt: '2025-03-06T09:40:00+03:00'
+                    description: 'Изображение для мартовской email-рассылки в фирменном стиле.',
+                    alt: 'Обложка мартовской рассылки',
+                    source: 'Дизайн-команда',
+                    createdAt: '2025-03-06T09:40:00+03:00',
+                    updatedAt: '2025-03-06T10:00:00+03:00'
                 },
                 {
                     id: 'asset-507',
@@ -6332,7 +6359,11 @@ const Dashboard = {
                     collection: 'interviews',
                     collectionName: 'Интервью',
                     tags: ['culture', 'people'],
-                    createdAt: '2025-02-28T11:20:00+03:00'
+                    description: 'Фотография команды для материалов о корпоративной культуре.',
+                    alt: 'Редакционная команда на встрече',
+                    source: 'HR-служба',
+                    createdAt: '2025-02-28T11:20:00+03:00',
+                    updatedAt: '2025-03-04T09:30:00+03:00'
                 },
                 {
                     id: 'asset-508',
@@ -6344,7 +6375,11 @@ const Dashboard = {
                     collection: 'news',
                     collectionName: 'Новости',
                     tags: ['press', 'kit'],
-                    createdAt: '2024-12-18T16:10:00+03:00'
+                    description: 'Архив с медиакитом, логотипами и материалами для прессы.',
+                    alt: 'Архив с медиакитом 2025',
+                    source: 'PR-команда',
+                    createdAt: '2024-12-18T16:10:00+03:00',
+                    updatedAt: '2025-01-05T10:00:00+03:00'
                 },
                 {
                     id: 'asset-509',
@@ -6359,7 +6394,11 @@ const Dashboard = {
                     collection: 'interviews',
                     collectionName: 'Интервью',
                     tags: ['video', 'product'],
-                    createdAt: '2025-03-03T15:25:00+03:00'
+                    description: 'Видео-фрагмент интервью с продуктовым менеджером.',
+                    alt: 'Превью интервью с менеджером',
+                    source: 'Видеоотдел',
+                    createdAt: '2025-03-03T15:25:00+03:00',
+                    updatedAt: '2025-03-04T08:45:00+03:00'
                 },
                 {
                     id: 'asset-510',
@@ -6375,7 +6414,11 @@ const Dashboard = {
                     collection: 'news',
                     collectionName: 'Новости',
                     tags: ['analytics', 'report'],
-                    createdAt: '2025-01-28T10:05:00+03:00'
+                    description: 'Инфографика с ключевыми метриками квартального отчёта.',
+                    alt: 'Инфографика с основными метриками',
+                    source: 'Аналитический отдел',
+                    createdAt: '2025-01-28T10:05:00+03:00',
+                    updatedAt: '2025-02-02T09:15:00+03:00'
                 }
             ];
 
@@ -6494,6 +6537,10 @@ const Dashboard = {
             });
 
             $library.on('click', '[data-role="media-item"]', function (event) {
+                if ($(event.target).closest('[data-role="media-open"]').length) {
+                    return;
+                }
+
                 if ($(event.target).is('button, a, i')) {
                     return;
                 }
@@ -6626,16 +6673,7 @@ const Dashboard = {
                 if (asset.type === 'image' && asset.thumb) {
                     $preview.append($('<img>').attr('src', asset.thumb).attr('alt', asset.title));
                 } else {
-                    var icon = 'file-o';
-                    if (asset.type === 'video') {
-                        icon = 'film';
-                    } else if (asset.type === 'audio') {
-                        icon = 'music';
-                    } else if (asset.type === 'document') {
-                        icon = 'file-text-o';
-                    } else if (asset.type === 'archive') {
-                        icon = 'archive';
-                    }
+                    var icon = self.getMediaTypeIcon(asset.type);
                     $preview.append('<div class="media-library__icon"><i class="fa fa-' + icon + '"></i></div>');
                 }
                 $card.append($preview);
@@ -6659,6 +6697,17 @@ const Dashboard = {
                 }
 
                 $caption.append($('<div class="media-library__meta text-muted"></div>').text(meta.join(' • ')));
+
+                var viewUrl = self.getMediaViewUrl(asset.id);
+                if (viewUrl) {
+                    var $actions = $('<div class="media-library__actions text-right"></div>');
+                    var $viewButton = $('<a class="btn btn-xs btn-default" data-role="media-open"></a>')
+                        .attr('href', viewUrl)
+                        .attr('data-pjax', '0')
+                        .html('<i class="fa fa-pencil"></i> Открыть');
+                    $actions.append($viewButton);
+                    $caption.append($actions);
+                }
                 $card.append($caption);
                 $col.append($card);
                 $container.append($col);
@@ -6699,8 +6748,369 @@ const Dashboard = {
 
                 var $meta = $('<div class="media-library__list-meta text-muted"></div>').text(metaParts.join(' • '));
                 $row.append($title).append($meta);
+
+                var viewUrl = self.getMediaViewUrl(asset.id);
+                if (viewUrl) {
+                    var $actions = $('<div class="media-library__list-actions pull-right"></div>');
+                    var $viewLink = $('<a class="btn btn-xs btn-default" data-role="media-open"></a>')
+                        .attr('href', viewUrl)
+                        .attr('data-pjax', '0')
+                        .html('<i class="fa fa-pencil"></i>');
+                    $actions.append($viewLink);
+                    $row.append($actions);
+                }
                 $container.append($row);
             });
+        },
+
+        initMediaViewModule: function (context) {
+            var $context = this.resolveContext(context);
+            var $view = this.findInContext($context, '[data-role="media-view"]').first();
+            if (!$view.length) {
+                return;
+            }
+
+            if ($view.data('mediaViewInitialized')) {
+                return;
+            }
+
+            $view.data('mediaViewInitialized', true);
+
+            var assetId = String($view.data('assetId') || '');
+            if (!assetId) {
+                this.showMediaViewError($view, 'Ассет не найден.');
+                return;
+            }
+
+            var self = this;
+            this.getMediaAssets().done(function () {
+                var asset = self.findMediaAsset(assetId);
+                if (!asset) {
+                    self.showMediaViewError($view, 'Ассет не найден в библиотеке.');
+                    return;
+                }
+
+                self.populateMediaView($view, asset);
+                self.bindMediaViewForm($view, asset);
+            });
+        },
+
+        populateMediaView: function ($view, asset) {
+            if (!$view || !$view.length) {
+                return;
+            }
+
+            var $error = $view.find('[data-role="media-error"]');
+            if ($error.length) {
+                $error.hide().text('');
+            }
+
+            var $form = $view.find('[data-role="media-form"]');
+            if ($form.length) {
+                var $idInput = $form.find('[name="id"]');
+                if ($idInput.length) {
+                    $idInput.val(asset.id || '');
+                }
+
+                $form.find('[name="title"]').val(asset.title || '');
+                $form.find('[name="description"]').val(asset.description || '');
+                $form.find('[name="collection"]').val(asset.collection || '').trigger('change.select2');
+
+                var tags = asset.tags || [];
+                $form.find('[name="tags[]"]').val(tags).trigger('change.select2');
+                $form.find('[name="alt"]').val(asset.alt || '');
+                $form.find('[name="source"]').val(asset.source || '');
+            }
+
+            this.clearMediaFormErrors($form);
+            this.showMediaFormAlert($view, null, null);
+            this.refreshMediaViewSummary($view, asset);
+            $view.data('mediaAsset', asset);
+        },
+
+        refreshMediaViewSummary: function ($view, asset) {
+            if (!$view || !$view.length) {
+                return;
+            }
+
+            var title = asset.title || asset.filename || asset.id || '';
+            if (title) {
+                $view.find('[data-role="media-heading"]').text(title);
+            }
+
+            var $previewContainer = $view.find('[data-role="media-preview"]');
+            var $image = $previewContainer.find('[data-role="media-preview-image"]');
+            var $placeholder = $previewContainer.find('[data-role="media-preview-placeholder"]');
+            var preview = asset.preview || asset.thumb || '';
+            if (asset.type === 'image' && !preview) {
+                preview = asset.url || '';
+            }
+
+            if (preview) {
+                if (!$image.length) {
+                    $image = $('<img class="img-responsive img-rounded" data-role="media-preview-image">');
+                    $previewContainer.empty().append($image);
+                    $placeholder = $();
+                }
+
+                $image.attr('src', preview).attr('alt', asset.alt || title).show();
+                if ($placeholder.length) {
+                    $placeholder.hide();
+                }
+            } else {
+                if ($image.length) {
+                    $image.hide();
+                }
+
+                if (!$placeholder.length) {
+                    $placeholder = $('<div class="media-preview__placeholder text-center text-muted" data-role="media-preview-placeholder"></div>');
+                    $placeholder.append('<i class="fa fa-' + this.getMediaTypeIcon(asset.type) + ' fa-3x" data-role="media-preview-icon"></i>');
+                    $placeholder.append('<p class="small">Предпросмотр появится после загрузки файла.</p>');
+                    $previewContainer.empty().append($placeholder);
+                } else {
+                    $placeholder.show();
+                    var $icon = $placeholder.find('[data-role="media-preview-icon"]');
+                    if ($icon.length) {
+                        $icon.attr('class', 'fa fa-' + this.getMediaTypeIcon(asset.type) + ' fa-3x');
+                    }
+                }
+            }
+
+            var sizeLabel = this.formatFileSize(asset.size) || '—';
+            var durationLabel = this.formatMediaDuration(asset.duration) || '—';
+            var dimensionsLabel = (asset.width && asset.height)
+                ? asset.width + ' × ' + asset.height + ' px'
+                : '—';
+
+            $view.find('[data-role="meta-filename"]').text(asset.filename || '—');
+            $view.find('[data-role="meta-type"]').text(this.getMediaTypeLabel(asset.type));
+            $view.find('[data-role="meta-size"]').text(sizeLabel);
+            $view.find('[data-role="meta-dimensions"]').text(dimensionsLabel);
+            $view.find('[data-role="meta-duration"]').text(durationLabel);
+            $view.find('[data-role="meta-collection"]').text(asset.collectionName || asset.collection || '—');
+            $view.find('[data-role="meta-tags"]').text((asset.tags && asset.tags.length) ? asset.tags.join(', ') : '—');
+            $view.find('[data-role="meta-description"]').text(asset.description || '—');
+            $view.find('[data-role="meta-created"]').text(this.formatDateTimeLabel(asset.createdAt) || '—');
+            $view.find('[data-role="meta-updated"]').text(this.formatDateTimeLabel(asset.updatedAt) || '—');
+
+            var $metaUrl = $view.find('[data-role="meta-url"]');
+            if ($metaUrl.length) {
+                if (asset.url) {
+                    var $link = $metaUrl.find('a');
+                    if (!$link.length) {
+                        $link = $('<a target="_blank" rel="noopener noreferrer"></a>');
+                        $metaUrl.empty().append($link);
+                    }
+                    $link.attr('href', asset.url).text(asset.url);
+                } else {
+                    $metaUrl.text('—');
+                }
+            }
+
+            var $download = $view.find('[data-role="media-download"]');
+            if ($download.length) {
+                if (asset.url) {
+                    $download.attr('href', asset.url).removeClass('disabled');
+                } else {
+                    $download.attr('href', '#').addClass('disabled');
+                }
+            }
+        },
+
+        bindMediaViewForm: function ($view, asset) {
+            if (!$view || !$view.length) {
+                return;
+            }
+
+            var self = this;
+            var $form = $view.find('[data-role="media-form"]');
+            if (!$form.length) {
+                return;
+            }
+
+            $form.off('submit.mediaView').on('submit.mediaView', function (event) {
+                event.preventDefault();
+
+                var $submit = $form.find('[data-role="media-save"]');
+                if ($submit.length) {
+                    $submit.prop('disabled', true);
+                }
+
+                self.clearMediaFormErrors($form);
+                self.showMediaFormAlert($view, null, null);
+
+                var data = self.serializeMediaForm($form);
+                if (!data.collectionName && asset.collectionName) {
+                    data.collectionName = asset.collectionName;
+                }
+
+                var errors = self.validateMediaForm(data);
+                if (errors.length) {
+                    self.showMediaFormErrors($form, errors);
+                    self.showMediaFormAlert($view, 'danger', 'Проверьте правильность заполнения формы.');
+                    if ($submit.length) {
+                        $submit.prop('disabled', false);
+                    }
+                    return;
+                }
+
+                window.setTimeout(function () {
+                    asset.title = data.title;
+                    asset.description = data.description;
+                    asset.collection = data.collection;
+                    asset.collectionName = data.collectionName;
+                    asset.tags = data.tags;
+                    asset.alt = data.alt;
+                    asset.source = data.source;
+                    asset.updatedAt = new Date().toISOString();
+
+                    self.updateMediaAsset(asset);
+                    self.populateMediaView($view, asset);
+                    self.showMediaFormAlert($view, 'success', 'Изменения сохранены.');
+
+                    if ($submit.length) {
+                        $submit.prop('disabled', false);
+                    }
+                }, 200);
+            });
+
+            $view.find('[data-action="media-reset"]').off('click.mediaView').on('click.mediaView', function (event) {
+                event.preventDefault();
+                self.populateMediaView($view, asset);
+                self.showMediaFormAlert($view, 'info', 'Изменения отменены.');
+            });
+        },
+
+        serializeMediaForm: function ($form) {
+            var payload = {
+                id: '',
+                title: '',
+                description: '',
+                collection: '',
+                collectionName: '',
+                tags: [],
+                alt: '',
+                source: ''
+            };
+
+            if (!$form || !$form.length) {
+                return payload;
+            }
+
+            payload.id = $.trim(String($form.find('[name="id"]').val() || ''));
+            payload.title = $.trim(String($form.find('[name="title"]').val() || ''));
+            payload.description = $.trim(String($form.find('[name="description"]').val() || ''));
+
+            var $collection = $form.find('[name="collection"]');
+            payload.collection = $.trim(String($collection.val() || ''));
+            var $selectedOption = $collection.find('option:selected').first();
+            if ($selectedOption.length) {
+                payload.collectionName = $.trim($selectedOption.text());
+            }
+
+            var tags = $form.find('[name="tags[]"]').val() || [];
+            if (!$.isArray(tags)) {
+                tags = [tags];
+            }
+            payload.tags = tags
+                .map(function (tag) { return $.trim(String(tag || '')); })
+                .filter(function (tag) { return tag !== ''; });
+
+            payload.alt = $.trim(String($form.find('[name="alt"]').val() || ''));
+            payload.source = $.trim(String($form.find('[name="source"]').val() || ''));
+
+            return payload;
+        },
+
+        validateMediaForm: function (data) {
+            var errors = [];
+
+            if (!data.title) {
+                errors.push({ field: 'title', message: 'Укажите название файла.' });
+            }
+
+            if (!data.collection) {
+                errors.push({ field: 'collection', message: 'Выберите коллекцию.' });
+            }
+
+            return errors;
+        },
+
+        clearMediaFormErrors: function ($form) {
+            if (!$form || !$form.length) {
+                return;
+            }
+
+            $form.find('.form-group').removeClass('has-error');
+            $form.find('[data-role="field-error"]').each(function () {
+                $(this).text('').hide();
+            });
+        },
+
+        showMediaFormErrors: function ($form, errors) {
+            if (!$form || !$form.length) {
+                return;
+            }
+
+            errors.forEach(function (error) {
+                var field = error.field;
+                var message = error.message || 'Поле заполнено некорректно.';
+                var $group = $form.find('[data-field="' + field + '"]');
+                if (!$group.length) {
+                    return;
+                }
+
+                $group.addClass('has-error');
+                var $error = $group.find('[data-role="field-error"]');
+                if ($error.length) {
+                    $error.text(message).show();
+                }
+            });
+        },
+
+        showMediaFormAlert: function ($view, type, message) {
+            if (!$view || !$view.length) {
+                return;
+            }
+
+            var $alert = $view.find('[data-role="media-alert"]');
+            if (!$alert.length) {
+                return;
+            }
+
+            if (!type || !message) {
+                $alert.removeClass('alert-success alert-danger alert-info alert-warning').hide();
+                return;
+            }
+
+            var normalized = String(type === 'error' ? 'danger' : type);
+            if (['success', 'danger', 'info', 'warning'].indexOf(normalized) === -1) {
+                normalized = 'info';
+            }
+
+            $alert
+                .removeClass('alert-success alert-danger alert-info alert-warning')
+                .addClass('alert-' + normalized)
+                .text(message)
+                .show();
+        },
+
+        showMediaViewError: function ($view, message) {
+            if (!$view || !$view.length) {
+                return;
+            }
+
+            var $error = $view.find('[data-role="media-error"]');
+            if ($error.length) {
+                $error.text(message || 'Не удалось загрузить данные.').show();
+            }
+
+            var $form = $view.find('[data-role="media-form"]');
+            if ($form.length) {
+                $form.find('input, textarea, select, button').prop('disabled', true);
+            }
+
+            this.showMediaFormAlert($view, 'danger', message || 'Не удалось загрузить данные.');
         },
 
         setMediaLibraryViewMode: function (mode, $library) {
@@ -6809,6 +7219,54 @@ const Dashboard = {
             }
 
             return this.mediaAssetsIndex[key] || null;
+        },
+
+        getMediaViewUrl: function (assetId) {
+            var template = String(this.mediaViewUrlTemplate || '');
+            if (!template) {
+                return '';
+            }
+
+            var id = String(assetId || '');
+            if (!id) {
+                return '';
+            }
+
+            var encoded = encodeURIComponent(id);
+
+            return template.split('__id__').join(encoded);
+        },
+
+        getMediaTypeIcon: function (type) {
+            var map = {
+                image: 'picture-o',
+                video: 'film',
+                audio: 'music',
+                document: 'file-text-o',
+                archive: 'archive',
+                other: 'file-o'
+            };
+
+            var key = String(type || 'other');
+            return map[key] || map.other;
+        },
+
+        updateMediaAsset: function (asset) {
+            if (!asset || !asset.id) {
+                return;
+            }
+
+            var id = String(asset.id);
+            this.mediaAssetsIndex[id] = asset;
+
+            if ($.isArray(this.mediaAssetsDataset)) {
+                for (var index = 0; index < this.mediaAssetsDataset.length; index += 1) {
+                    if (String(this.mediaAssetsDataset[index].id) === id) {
+                        this.mediaAssetsDataset[index] = asset;
+                        break;
+                    }
+                }
+            }
         },
 
         formatFileSize: function (bytes) {

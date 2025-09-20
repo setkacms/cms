@@ -17,8 +17,6 @@
 
 declare(strict_types=1);
 
-namespace Setka\Cms\Infrastructure\DBAL\Migrations;
-
 use yii\db\Migration;
 
 /**

@@ -9,9 +9,12 @@ namespace Setka\Cms\Http\Dashboard\Assets;
 
 use Yii;
 use yii\web\AssetBundle;
+use yii\web\View;
 
 class DashboardAsset extends AssetBundle
 {
+    public const PAGE_ID_PARAM = 'dashboard.pageId';
+
     public $sourcePath = __DIR__;
 
     public $css = [
@@ -92,25 +95,53 @@ class DashboardAsset extends AssetBundle
             [\dmstr\web\AdminLteAsset::class]
         );
 
-        $route = Yii::$app->controller->route ?? '';
-        if ($route === '') {
-            return;
-        }
+        $pageId = $this->detectPageId($view);
+        if ($pageId !== null) {
+            $relativePath = 'js/pages/' . $pageId . '.js';
+            $absolutePath = $this->sourcePath . '/' . $relativePath;
 
-        $pageId = $route === 'index/index' ? 'dashboard' : str_replace('/', '.', $route);
-        $relativePath = $pageId === 'dashboard'
-            ? 'dist/js/dashboard.js'
-            : 'dist/js/pages/' . $pageId . '.js';
-
-        $absolutePath = $this->sourcePath . '/' . $relativePath;
-
-        if (!is_file($absolutePath)) {
-            return;
+            if (is_file($absolutePath)) {
+                $view->registerJsFile(
+                    $this->baseUrl . '/' . $relativePath,
+                    ['type' => 'module', 'depends' => [static::class]]
+                );
+            }
         }
 
         $view->registerJsFile(
-            $this->baseUrl . '/' . $relativePath,
+            $this->baseUrl . '/js/core/bootstrap-runner.js',
             ['type' => 'module', 'depends' => [static::class]]
         );
+    }
+
+    public static function formatPageId(string $controllerId, string $actionId): string
+    {
+        $controllerId = str_replace('/', '.', trim($controllerId));
+        $actionId = trim($actionId);
+
+        if ($controllerId === '' || $actionId === '') {
+            return '';
+        }
+
+        $pageId = $controllerId . '.' . $actionId;
+
+        return $pageId === 'index.index' ? 'dashboard' : $pageId;
+    }
+
+    private function detectPageId(View $view): ?string
+    {
+        $pageId = $view->params[self::PAGE_ID_PARAM] ?? null;
+        if (is_string($pageId) && $pageId !== '') {
+            return $pageId;
+        }
+
+        $controller = Yii::$app->controller;
+        if ($controller === null || $controller->action === null) {
+            return null;
+        }
+
+        $pageId = self::formatPageId($controller->id, $controller->action->id);
+
+        return $pageId !== '' ? $pageId : null;
     }
 }

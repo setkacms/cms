@@ -120,8 +120,21 @@ final class CollectionsController extends Controller
 
     public function actionSettings(?string $handle = null): string
     {
+        if ($handle === null || $handle === '') {
+            return $this->render('settings', [
+                'collection' => null,
+            ]);
+        }
+
+        $collection = $this->findCollectionByHandle($handle);
+        if ($collection === null) {
+            throw new NotFoundHttpException('Коллекция не найдена.');
+        }
+
+        $this->assertCanViewEntries($collection);
+
         return $this->render('settings', [
-            'handle' => $handle,
+            'collection' => $collection,
         ]);
     }
 

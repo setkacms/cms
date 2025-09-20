@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use yii\helpers\Html;
 use yii\helpers\Json;
+use yii\helpers\Url;
 
 /* @var $this yii\web\View */
 
@@ -22,12 +23,22 @@ $autosaveMessages = [
 ];
 ?>
 
+<?php
+$previewUrl = Url::to(['/dashboard/elements/preview', 'id' => 'demo-element']);
+$historyUrl = Url::to(['/dashboard/elements/history', 'id' => 'demo-element']);
+?>
 <div
     class="box box-success"
     data-role="element-form"
     data-unsaved-message="<?= Html::encode($unsavedMessage) ?>"
     data-autosave-storage-key="dashboard.element.create.draft"
     data-autosave-debounce="2500"
+    data-preview-url="<?= Html::encode($previewUrl) ?>"
+    data-history-url="<?= Html::encode($historyUrl) ?>"
+    data-element-id="demo-element"
+    data-element-locale="ru-RU"
+    data-element-version="2"
+    data-element-compare="1"
 >
     <div class="box-header with-border">
         <h3 class="box-title">Новый элемент</h3>
@@ -218,6 +229,23 @@ $this->registerJs(<<<JS
 JS);
 ?>
 
+<div class="modal fade" id="element-preview" tabindex="-1" role="dialog" aria-labelledby="element-preview-label">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="element-preview-label">Предпросмотр версии</h4>
+            </div>
+            <div class="modal-body" data-role="element-preview-body">
+                <p class="text-muted text-center">Загрузка предпросмотра…</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-default" data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="element-history" tabindex="-1" role="dialog" aria-labelledby="element-history-label">
     <div class="modal-dialog modal-lg" role="document">
         <div class="modal-content">
@@ -225,22 +253,8 @@ JS);
                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 <h4 class="modal-title" id="element-history-label">История изменений</h4>
             </div>
-            <div class="modal-body">
-                <p class="text-muted">Журнал версий будет доступен после интеграции с backend.</p>
-                <table class="table table-condensed">
-                    <thead>
-                    <tr>
-                        <th>Дата</th>
-                        <th>Автор</th>
-                        <th>Комментарий</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <tr>
-                        <td colspan="3" class="text-center text-muted">Записей пока нет.</td>
-                    </tr>
-                    </tbody>
-                </table>
+            <div class="modal-body" data-role="element-history-body">
+                <p class="text-muted text-center">Загрузка истории изменений…</p>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-default" data-dismiss="modal">Закрыть</button>

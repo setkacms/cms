@@ -2020,6 +2020,7 @@
             }
 
             this.bindElementAutosaveActions($container);
+            this.bindElementPreviewModule($container);
 
             var self = this;
             var changeSelector = 'input, textarea, select, [contenteditable="true"]';
@@ -2058,6 +2059,200 @@
             $container.on('click', selectors, function () {
                 self.performElementAutosave({ force: true });
             });
+        },
+
+        bindElementPreviewModule: function ($container) {
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            var self = this;
+            var previewUrl = String($container.data('previewUrl') || '');
+            var historyUrl = String($container.data('historyUrl') || '');
+
+            var defaultLocale = String($container.data('elementLocale') || '');
+            var defaultVersion = parseInt($container.data('elementVersion'), 10);
+            if (isNaN(defaultVersion)) {
+                defaultVersion = null;
+            }
+
+            var defaultCompare = parseInt($container.data('elementCompare'), 10);
+            if (isNaN(defaultCompare)) {
+                defaultCompare = null;
+            }
+
+            $container.on('click', '[data-action="toggle-preview"]', function (event) {
+                event.preventDefault();
+
+                if (!previewUrl) {
+                    return;
+                }
+
+                var params = {
+                    locale: self.resolveElementLocale($container, defaultLocale),
+                    version: defaultVersion,
+                    compare: defaultCompare
+                };
+
+                self.showElementPreview(previewUrl, params);
+            });
+
+            $container.on('click', '[data-action="open-history"]', function (event) {
+                event.preventDefault();
+
+                if (!historyUrl) {
+                    return;
+                }
+
+                var params = {
+                    locale: self.resolveElementLocale($container, defaultLocale)
+                };
+
+                self.showElementHistory(historyUrl, params);
+            });
+        },
+
+        showElementPreview: function (url, params) {
+            var $modal = $('#element-preview');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $body = $modal.find('[data-role="element-preview-body"]');
+            if ($body.length) {
+                $body.html('<p class="text-muted text-center">Загрузка предпросмотра…</p>');
+            }
+
+            $modal.modal('show');
+
+            this.fetchElementPreview(url, params).done(function (payload) {
+                if (!$body.length) {
+                    return;
+                }
+
+                var html = payload && payload.html
+                    ? payload.html
+                    : '<p class="text-muted text-center">Нет данных для отображения.</p>';
+
+                $body.html(html);
+            }).fail(function () {
+                if ($body.length) {
+                    $body.html('<div class="alert alert-danger">Не удалось загрузить предпросмотр.</div>');
+                }
+            });
+        },
+
+        fetchElementPreview: function (url, params) {
+            return $.ajax({
+                url: url,
+                method: 'GET',
+                data: this.filterEmptyParams(params || {}),
+                dataType: 'json'
+            });
+        },
+
+        showElementHistory: function (url, params) {
+            var $modal = $('#element-history');
+            if (!$modal.length) {
+                return;
+            }
+
+            var $body = $modal.find('[data-role="element-history-body"]');
+            if ($body.length) {
+                $body.html('<p class="text-muted text-center">Загрузка истории изменений…</p>');
+            }
+
+            $modal.modal('show');
+
+            var self = this;
+            this.fetchElementHistory(url, params).done(function (payload) {
+                if ($body.length) {
+                    self.renderElementHistory($body, payload);
+                }
+            }).fail(function () {
+                if ($body.length) {
+                    $body.html('<div class="alert alert-danger">Не удалось загрузить историю версий.</div>');
+                }
+            });
+        },
+
+        fetchElementHistory: function (url, params) {
+            return $.ajax({
+                url: url,
+                method: 'GET',
+                data: this.filterEmptyParams(params || {}),
+                dataType: 'json'
+            });
+        },
+
+        renderElementHistory: function ($container, payload) {
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            $container.empty();
+
+            var items = payload && payload.items ? payload.items : [];
+            if (!items.length) {
+                $container.append('<p class="text-muted text-center">История пока пуста.</p>');
+                return;
+            }
+
+            var self = this;
+            var $table = $('<table class="table table-condensed table-striped"></table>');
+            var $thead = $('<thead><tr><th>Версия</th><th>Статус</th><th>Обновлена</th><th>Опубликована</th></tr></thead>');
+            var $tbody = $('<tbody></tbody>');
+
+            $.each(items, function (_, item) {
+                var number = item && typeof item.number !== 'undefined' ? item.number : '—';
+                var status = item && item.status ? item.status : '—';
+                var updated = self.formatDateTimeLabel(item ? item.updatedAt : null) || '—';
+                var published = self.formatDateTimeLabel(item ? item.publishedAt : null) || '—';
+
+                var $row = $('<tr></tr>');
+                $row.append($('<td></td>').text('v' + number));
+                $row.append($('<td></td>').text(status));
+                $row.append($('<td></td>').text(updated));
+                $row.append($('<td></td>').text(published));
+                $tbody.append($row);
+            });
+
+            $table.append($thead).append($tbody);
+            $container.append($table);
+        },
+
+        resolveElementLocale: function ($container, fallback) {
+            var $field = $container.find('[data-role="element-locale"], select[name="Element[locale]"]').first();
+            if ($field.length) {
+                var value = $field.val();
+                if (Array.isArray(value)) {
+                    if (value.length) {
+                        return value[0];
+                    }
+                } else if (value) {
+                    return value;
+                }
+            }
+
+            return fallback || '';
+        },
+
+        filterEmptyParams: function (params) {
+            var filtered = {};
+
+            $.each(params, function (key, value) {
+                if (value === null || typeof value === 'undefined') {
+                    return;
+                }
+
+                if (typeof value === 'string' && value.trim() === '') {
+                    return;
+                }
+
+                filtered[key] = value;
+            });
+
+            return filtered;
         },
 
         markElementFormDirty: function () {
@@ -4345,6 +4540,34 @@
             var minutes = Math.floor(seconds / 60);
             var rest = seconds % 60;
             return minutes + ':' + (rest < 10 ? '0' + rest : rest);
+        },
+
+        formatDateTimeLabel: function (value) {
+            if (!value) {
+                return '';
+            }
+
+            var date = new Date(value);
+            if (date.toString() === 'Invalid Date') {
+                return value;
+            }
+
+            var day = this.padZero(date.getDate());
+            var month = this.padZero(date.getMonth() + 1);
+            var year = date.getFullYear();
+            var hours = this.padZero(date.getHours());
+            var minutes = this.padZero(date.getMinutes());
+
+            return day + '.' + month + '.' + year + ' ' + hours + ':' + minutes;
+        },
+
+        padZero: function (value) {
+            var number = parseInt(value, 10);
+            if (isNaN(number)) {
+                return '00';
+            }
+
+            return number < 10 ? '0' + number : String(number);
         },
 
         formatDateLabel: function (value) {

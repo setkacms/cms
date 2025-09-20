@@ -4,321 +4,46 @@ declare(strict_types=1);
 
 use yii\helpers\Html;
 use yii\helpers\Json;
+use yii\helpers\Url;
 
 /* @var $this yii\web\View */
+/* @var array<int, array<string, mixed>> $schemasDataset */
+/* @var array<int, array<string, mixed>> $schemasDefaultSavedViews */
 
 $this->title = 'Схемы данных';
 $this->params['breadcrumbs'][] = $this->title;
 
-$schemasDataset = [
-    [
-        'id' => 'schema-article',
-        'name' => 'Схема «Статья»',
-        'collection' => [
-            'handle' => 'articles',
-            'name' => 'Коллекция «Статьи»',
-            'type' => 'content',
-        ],
-        'description' => 'Шаблон для полноформатных материалов с поддержкой мультимедийных блоков и локализации.',
-        'updated' => '18.03.2025 11:24',
-        'updatedIso' => '2025-03-18T11:24:00+03:00',
-        'editUrl' => '/dashboard/schemas/editor?schema=schema-article',
-        'fields' => [
-            [
-                'name' => 'Заголовок',
-                'handle' => 'title',
-                'type' => 'text',
-                'required' => true,
-                'localized' => true,
-                'description' => 'Основной заголовок материала, отображается на сайте и в соцсетях.',
-            ],
-            [
-                'name' => 'Слаг',
-                'handle' => 'slug',
-                'type' => 'slug',
-                'required' => true,
-                'description' => 'URL-идентификатор записи, генерируется из заголовка.',
-            ],
-            [
-                'name' => 'Лид',
-                'handle' => 'lead',
-                'type' => 'richtext',
-                'localized' => true,
-                'description' => 'Короткое описание, которое используется в подборках и рассылках.',
-            ],
-            [
-                'name' => 'Контент',
-                'handle' => 'content',
-                'type' => 'matrix',
-                'required' => true,
-                'localized' => true,
-                'description' => 'Основной контент статьи с блоками текста, галереями и цитатами.',
-            ],
-            [
-                'name' => 'Автор',
-                'handle' => 'author',
-                'type' => 'relation',
-                'description' => 'Связь со справочником авторов.',
-            ],
-            [
-                'name' => 'Темы',
-                'handle' => 'topics',
-                'type' => 'taxonomy',
-                'multiple' => true,
-                'description' => 'Теги и рубрики, которые помогают классифицировать материал.',
-            ],
-        ],
-        'tags' => ['контент', 'редакция', 'статья'],
-    ],
-    [
-        'id' => 'schema-news',
-        'name' => 'Схема «Новость»',
-        'collection' => [
-            'handle' => 'newsroom',
-            'name' => 'Коллекция «Новости»',
-            'type' => 'content',
-        ],
-        'description' => 'Облегчённый шаблон для оперативных публикаций, ориентированный на скорость выпуска.',
-        'updated' => '04.03.2025 08:05',
-        'updatedIso' => '2025-03-04T08:05:00+03:00',
-        'editUrl' => '/dashboard/schemas/editor?schema=schema-news',
-        'fields' => [
-            [
-                'name' => 'Заголовок',
-                'handle' => 'title',
-                'type' => 'text',
-                'required' => true,
-                'description' => 'Короткий заголовок новости.',
-            ],
-            [
-                'name' => 'Слаг',
-                'handle' => 'slug',
-                'type' => 'slug',
-                'required' => true,
-                'description' => 'URL-идентификатор.',
-            ],
-            [
-                'name' => 'Анонс',
-                'handle' => 'excerpt',
-                'type' => 'textarea',
-                'description' => 'Вступительный абзац, выводится в лентах.',
-            ],
-            [
-                'name' => 'Источник',
-                'handle' => 'source_link',
-                'type' => 'url',
-                'description' => 'Ссылка на первоисточник новости.',
-            ],
-            [
-                'name' => 'Опубликовано',
-                'handle' => 'published_at',
-                'type' => 'datetime',
-                'required' => true,
-                'description' => 'Дата и время публикации.',
-            ],
-        ],
-        'tags' => ['новости', 'оперативно'],
-    ],
-    [
-        'id' => 'schema-product',
-        'name' => 'Схема «Продукт»',
-        'collection' => [
-            'handle' => 'products',
-            'name' => 'Каталог «Продукты»',
-            'type' => 'catalog',
-        ],
-        'description' => 'Схема для карточек товаров с поддержкой характеристик и галерей.',
-        'updated' => '22.02.2025 17:40',
-        'updatedIso' => '2025-02-22T17:40:00+03:00',
-        'editUrl' => '/dashboard/schemas/editor?schema=schema-product',
-        'fields' => [
-            [
-                'name' => 'Название',
-                'handle' => 'name',
-                'type' => 'text',
-                'required' => true,
-                'description' => 'Отображается на витрине и в поиске.',
-            ],
-            [
-                'name' => 'Артикул',
-                'handle' => 'sku',
-                'type' => 'text',
-                'required' => true,
-                'description' => 'Уникальный идентификатор товара.',
-            ],
-            [
-                'name' => 'Цена',
-                'handle' => 'price',
-                'type' => 'number',
-                'required' => true,
-                'description' => 'Актуальная цена в выбранной валюте.',
-            ],
-            [
-                'name' => 'Галерея',
-                'handle' => 'gallery',
-                'type' => 'assets',
-                'multiple' => true,
-                'description' => 'Изображения товара.',
-            ],
-            [
-                'name' => 'Характеристики',
-                'handle' => 'specs',
-                'type' => 'table',
-                'description' => 'Ключевые параметры и особенности.',
-            ],
-        ],
-        'tags' => ['каталог', 'commerce'],
-    ],
-    [
-        'id' => 'schema-author',
-        'name' => 'Схема «Автор»',
-        'collection' => [
-            'handle' => 'authors',
-            'name' => 'Справочник «Авторы»',
-            'type' => 'directory',
-        ],
-        'description' => 'Карточка автора для отображения профиля, контактов и социальных сетей.',
-        'updated' => '12.02.2025 13:15',
-        'updatedIso' => '2025-02-12T13:15:00+03:00',
-        'editUrl' => '/dashboard/schemas/editor?schema=schema-author',
-        'fields' => [
-            [
-                'name' => 'Имя',
-                'handle' => 'name',
-                'type' => 'text',
-                'required' => true,
-                'description' => 'Полное имя автора.',
-            ],
-            [
-                'name' => 'Слаг',
-                'handle' => 'slug',
-                'type' => 'slug',
-                'required' => true,
-                'description' => 'URL-идентификатор профиля.',
-            ],
-            [
-                'name' => 'Фотография',
-                'handle' => 'photo',
-                'type' => 'asset',
-                'description' => 'Портрет автора.',
-            ],
-            [
-                'name' => 'Биография',
-                'handle' => 'bio',
-                'type' => 'richtext',
-                'description' => 'Краткая биография и достижения.',
-            ],
-            [
-                'name' => 'Социальные сети',
-                'handle' => 'social_links',
-                'type' => 'matrix',
-                'multiple' => true,
-                'description' => 'Ссылки на профили в соцсетях.',
-            ],
-        ],
-        'tags' => ['справочник', 'команда'],
-    ],
-    [
-        'id' => 'schema-event',
-        'name' => 'Схема «Событие»',
-        'collection' => [
-            'handle' => 'events',
-            'name' => 'Коллекция «События»',
-            'type' => 'calendar',
-        ],
-        'description' => 'Схема для мероприятий, вебинаров и офлайн-активностей.',
-        'updated' => '02.02.2025 09:50',
-        'updatedIso' => '2025-02-02T09:50:00+03:00',
-        'editUrl' => '/dashboard/schemas/editor?schema=schema-event',
-        'fields' => [
-            [
-                'name' => 'Название',
-                'handle' => 'title',
-                'type' => 'text',
-                'required' => true,
-                'description' => 'Имя события.',
-            ],
-            [
-                'name' => 'Слаг',
-                'handle' => 'slug',
-                'type' => 'slug',
-                'required' => true,
-                'description' => 'URL-идентификатор.',
-            ],
-            [
-                'name' => 'Дата начала',
-                'handle' => 'start_at',
-                'type' => 'datetime',
-                'required' => true,
-                'description' => 'Старт мероприятия.',
-            ],
-            [
-                'name' => 'Локация',
-                'handle' => 'location',
-                'type' => 'text',
-                'description' => 'Место проведения или ссылка на онлайн-площадку.',
-            ],
-            [
-                'name' => 'Регистрация',
-                'handle' => 'registration',
-                'type' => 'url',
-                'description' => 'Ссылка на форму регистрации.',
-            ],
-        ],
-        'tags' => ['мероприятия', 'календарь'],
-    ],
-];
+$schemasDataset = $schemasDataset ?? [];
+$schemasDefaultSavedViews = $schemasDefaultSavedViews ?? [];
 
-$schemasDefaultSavedViews = [
-    [
-        'id' => 'schemas-default-articles',
-        'name' => 'Материалы редакции',
-        'filters' => [
-            'collection' => 'articles',
-            'selected' => 'schema-article',
-        ],
-    ],
-    [
-        'id' => 'schemas-default-news',
-        'name' => 'Экспресс-новости',
-        'filters' => [
-            'collection' => 'newsroom',
-            'selected' => 'schema-news',
-        ],
-    ],
-    [
-        'id' => 'schemas-default-products',
-        'name' => 'Каталог продукции',
-        'filters' => [
-            'collection' => 'products',
-            'selected' => 'schema-product',
-        ],
-    ],
-    [
-        'id' => 'schemas-default-authors',
-        'name' => 'Справочник авторов',
-        'filters' => [
-            'collection' => 'authors',
-            'selected' => 'schema-author',
-        ],
-    ],
-    [
-        'id' => 'schemas-default-events',
-        'name' => 'События и вебинары',
-        'filters' => [
-            'collection' => 'events',
-            'selected' => 'schema-event',
-        ],
-    ],
-];
+$indexUrl = Url::to(['index']);
+$createUrl = Url::to(['create']);
+$editorUrl = Url::to(['editor']);
+
+$pendingStorageKey = 'dashboard.schemas.pendingUpdate';
+$datasetStorageKey = 'dashboard.schemas.customDataset';
+
+$indexUrlJson = Json::htmlEncode($indexUrl);
+$createUrlJson = Json::htmlEncode($createUrl);
+$editorUrlJson = Json::htmlEncode($editorUrl);
+$pendingStorageKeyJson = Json::htmlEncode($pendingStorageKey);
+$datasetStorageKeyJson = Json::htmlEncode($datasetStorageKey);
+
+$this->registerJs(<<<JS
+window.cmsSchemasIndexUrl = {$indexUrlJson};
+window.cmsSchemasCreateUrl = {$createUrlJson};
+window.cmsSchemasEditorUrl = {$editorUrlJson};
+window.cmsSchemasPendingStorageKey = {$pendingStorageKeyJson};
+window.cmsSchemasDatasetStorageKey = {$datasetStorageKeyJson};
+JS);
 ?>
 
-<div class="box box-primary" data-role="schemas">
+<div class="box box-primary" data-role="schemas" data-index-url="<?= Html::encode($indexUrl) ?>" data-create-url="<?= Html::encode($createUrl) ?>" data-editor-url="<?= Html::encode($editorUrl) ?>">
     <div class="box-header with-border">
         <h3 class="box-title">Конструктор схем</h3>
         <div class="box-tools">
             <div class="btn-group btn-group-sm">
-                <button type="button" class="btn btn-success" data-action="create-schema">
+                <button type="button" class="btn btn-success" data-action="create-schema" data-create-url="<?= Html::encode($createUrl) ?>">
                     <i class="fa fa-plus"></i> Новая схема
                 </button>
                 <button type="button" class="btn btn-default" data-action="import-schema">
@@ -412,6 +137,7 @@ $schemasDefaultSavedViews = [
                         <?= Html::a('<i class="fa fa-pencil"></i> Редактировать', '#', [
                             'class' => 'btn btn-primary btn-sm disabled',
                             'data-role' => 'edit-schema',
+                            'data-pjax' => '0',
                         ]) ?>
                     </div>
                 </div>

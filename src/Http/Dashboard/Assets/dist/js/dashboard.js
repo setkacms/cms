@@ -21,6 +21,8 @@
         schemasCreateUrl: '',
         schemasPendingUpdateStorageKey: 'dashboard.schemas.pendingUpdate',
         schemasDatasetStorageKey: 'dashboard.schemas.customDataset',
+        schemasExportFormat: 'json-pretty',
+        schemasExportScope: 'current',
         customSchemasDataset: [],
         schemaCollections: [],
         schemaFieldTypes: [],
@@ -1118,6 +1120,7 @@
 
             this.setupSchemasModuleConfig($container);
             this.bindSchemasActions($container);
+            this.bindSchemasExportControls();
 
             this.schemasDataset = this.readSchemasDatasetFromDom();
             this.schemasDefaultSavedViews = this.readSchemasDefaultSavedViewsFromDom();
@@ -1690,6 +1693,357 @@
                     window.location.href = target;
                 }
             });
+
+            $container.off('click.schemasActions', '[data-action="export-schema"]');
+            $container.on('click.schemasActions', '[data-action="export-schema"]', function (event) {
+                event.preventDefault();
+
+                var $trigger = $(this);
+                var target = $trigger.attr('data-target');
+                var $modal = target ? $(target) : $('#schema-export');
+
+                if (!$modal.length) {
+                    console.warn('Модальное окно экспорта схем не найдено.');
+                    return;
+                }
+
+                self.prepareSchemasExport($modal);
+
+                if (typeof $modal.modal === 'function') {
+                    $modal.modal('show');
+                } else {
+                    $modal.show();
+                }
+            });
+        },
+
+        bindSchemasExportControls: function () {
+            var self = this;
+
+            $(document).off('.schemasExport');
+
+            $(document).on('shown.bs.modal.schemasExport', '#schema-export', function () {
+                self.prepareSchemasExport($(this));
+            });
+
+            $(document).on('change.schemasExport', '[data-role="schemas-export-format"]', function () {
+                var format = String($(this).val() || '').toLowerCase();
+                if (!format) {
+                    format = 'json-pretty';
+                    $(this).val(format);
+                }
+
+                self.schemasExportFormat = format;
+                self.prepareSchemasExport($('#schema-export'));
+            });
+
+            $(document).on('change.schemasExport', '[name="schemas-export-scope"]', function () {
+                var scope = String($(this).val() || '').toLowerCase();
+                if (!scope) {
+                    scope = 'current';
+                    $(this).val(scope);
+                }
+
+                self.schemasExportScope = scope;
+                self.prepareSchemasExport($('#schema-export'));
+            });
+
+            $(document).on('click.schemasExport', '[data-action="schemas-copy-export"]', function (event) {
+                event.preventDefault();
+
+                var $button = $(this);
+                if ($button.prop('disabled')) {
+                    return;
+                }
+
+                var $modal = $button.closest('.modal');
+                var $textarea = $modal.find('[data-role="schemas-export-result"]');
+                if (!$textarea.length) {
+                    return;
+                }
+
+                $textarea.trigger('select');
+
+                var success = false;
+                try {
+                    success = document.execCommand('copy');
+                } catch (error) {
+                    success = false;
+                }
+
+                var $feedback = $modal.find('[data-role="schemas-export-feedback"]');
+                if ($feedback.length) {
+                    $feedback.removeClass('text-success text-danger');
+                    if (success) {
+                        $feedback.addClass('text-success').text('Экспортированные данные скопированы в буфер обмена.');
+                    } else {
+                        $feedback.addClass('text-danger').text('Не удалось скопировать данные автоматически. Скопируйте их вручную.');
+                    }
+                }
+            });
+        },
+
+        prepareSchemasExport: function ($modal) {
+            if (!$modal || !$modal.length) {
+                return;
+            }
+
+            var $formatSelect = $modal.find('[data-role="schemas-export-format"]');
+            var $scopeInputs = $modal.find('[name="schemas-export-scope"]');
+            var $empty = $modal.find('[data-role="schemas-export-empty"]');
+            var $emptyMessage = $empty.find('[data-role="schemas-export-empty-message"]');
+            var $resultContainer = $modal.find('[data-role="schemas-export-result-container"]');
+            var $result = $modal.find('[data-role="schemas-export-result"]');
+            var $meta = $modal.find('[data-role="schemas-export-meta"]');
+            var $feedback = $modal.find('[data-role="schemas-export-feedback"]');
+            var $download = $modal.find('[data-role="schemas-export-download"]');
+            var $copyButton = $modal.find('[data-action="schemas-copy-export"]');
+
+            var format = this.schemasExportFormat || 'json-pretty';
+            var scope = this.schemasExportScope || 'current';
+
+            if ($formatSelect.length) {
+                var currentFormat = String($formatSelect.val() || '').toLowerCase();
+                if (!currentFormat) {
+                    currentFormat = format;
+                    $formatSelect.val(currentFormat);
+                }
+                if (currentFormat !== format) {
+                    format = currentFormat;
+                }
+            }
+
+            var allowedScopes = ['current', 'filtered', 'all'];
+            if ($scopeInputs.length) {
+                var $checked = $scopeInputs.filter(':checked');
+                var currentScope = $checked.length ? String($checked.val() || '').toLowerCase() : '';
+                if (!currentScope) {
+                    currentScope = scope;
+                }
+                if (allowedScopes.indexOf(currentScope) === -1) {
+                    currentScope = 'current';
+                }
+                if (!$checked.length || String($checked.val()).toLowerCase() !== currentScope) {
+                    $scopeInputs.filter('[value="' + currentScope + '"]').prop('checked', true);
+                }
+                scope = currentScope;
+            }
+
+            if (allowedScopes.indexOf(scope) === -1) {
+                scope = 'current';
+            }
+
+            this.schemasExportFormat = format;
+            this.schemasExportScope = scope;
+
+            var payload = this.buildSchemasExportPayload(format, scope);
+
+            if ($feedback.length) {
+                $feedback.removeClass('text-success text-danger').text('');
+            }
+
+            if (payload.error) {
+                if ($empty.length) {
+                    $empty.show();
+                    if ($emptyMessage.length) {
+                        $emptyMessage.text(payload.error);
+                    } else {
+                        $empty.text(payload.error);
+                    }
+                }
+                if ($resultContainer.length) {
+                    $resultContainer.hide();
+                }
+                if ($result.length) {
+                    $result.val('');
+                }
+                if ($meta.length) {
+                    $meta.text('');
+                }
+                if ($download.length) {
+                    $download.hide().removeAttr('href').removeAttr('download');
+                }
+                if ($copyButton.length) {
+                    $copyButton.prop('disabled', true);
+                }
+                return;
+            }
+
+            if ($empty.length) {
+                $empty.hide();
+                if ($emptyMessage.length) {
+                    $emptyMessage.text('');
+                }
+            }
+
+            if ($resultContainer.length) {
+                $resultContainer.show();
+            }
+
+            if ($result.length) {
+                $result.val(payload.content || '');
+            }
+
+            if ($meta.length) {
+                var metaText = payload.meta || '';
+                if (metaText) {
+                    metaText += ' ';
+                }
+                metaText += 'Используйте кнопки ниже, чтобы скопировать или скачать результат.';
+                $meta.text(metaText);
+            }
+
+            if ($download.length) {
+                if (payload.content) {
+                    var href = 'data:' + (payload.mime || 'application/octet-stream') + ';charset=utf-8,' + encodeURIComponent(payload.content);
+                    $download.attr({
+                        href: href,
+                        download: payload.filename || 'schemas-export.txt'
+                    }).show();
+                } else {
+                    $download.hide().removeAttr('href').removeAttr('download');
+                }
+            }
+
+            if ($copyButton.length) {
+                $copyButton.prop('disabled', !payload.content);
+            }
+        },
+
+        getSchemasForExport: function (scope) {
+            var normalizedScope = (scope || '').toLowerCase();
+            if (normalizedScope === 'filtered') {
+                var filters = this.getSchemaFilters();
+                return this.sortSchemasByUpdated(this.filterSchemasDataset(filters));
+            }
+
+            if (normalizedScope === 'all') {
+                var allItems = [];
+                for (var i = 0; i < this.schemasDataset.length; i++) {
+                    if (this.schemasDataset[i]) {
+                        allItems.push(this.schemasDataset[i]);
+                    }
+                }
+                return this.sortSchemasByUpdated(allItems);
+            }
+
+            var schema = this.findSchemaById(this.schemasCurrentSelectionId);
+            if (!schema) {
+                return [];
+            }
+
+            return [schema];
+        },
+
+        getSchemasExportScopeDescription: function (scope) {
+            var normalizedScope = (scope || '').toLowerCase();
+            if (normalizedScope === 'filtered') {
+                return 'все схемы из текущего списка';
+            }
+            if (normalizedScope === 'all') {
+                return 'весь набор схем';
+            }
+            return 'только выбранная схема';
+        },
+
+        buildSchemasExportPayload: function (format, scope) {
+            var normalizedFormat = (format || '').toLowerCase();
+            if (!normalizedFormat) {
+                normalizedFormat = 'json-pretty';
+            }
+
+            var normalizedScope = (scope || '').toLowerCase();
+            if (['current', 'filtered', 'all'].indexOf(normalizedScope) === -1) {
+                normalizedScope = 'current';
+            }
+
+            var items = this.getSchemasForExport(normalizedScope);
+            var count = Array.isArray(items) ? items.length : 0;
+
+            var payload = {
+                format: normalizedFormat,
+                scope: normalizedScope,
+                mime: 'application/json',
+                extension: 'json',
+                filename: '',
+                content: '',
+                meta: '',
+                count: count,
+                error: ''
+            };
+
+            if (normalizedScope === 'current' && count === 0) {
+                payload.error = 'Выберите схему в таблице перед экспортом.';
+                return payload;
+            }
+
+            var now = new Date();
+            var pad = function (value) {
+                return value < 10 ? '0' + value : String(value);
+            };
+            var datePart = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+            var baseName = 'schemas-export-' + normalizedScope + '-' + datePart;
+
+            payload.filename = baseName + '.json';
+
+            var sanitizedSchemas = this.cloneForExport(items);
+            if (!Array.isArray(sanitizedSchemas)) {
+                sanitizedSchemas = [];
+            }
+
+            var data = {
+                generatedAt: now.toISOString(),
+                scope: normalizedScope,
+                total: count,
+                schemas: sanitizedSchemas
+            };
+
+            var scopeDescription = this.getSchemasExportScopeDescription(normalizedScope);
+            var formatLabel = 'Читаемый JSON';
+
+            if (normalizedFormat === 'json') {
+                payload.format = 'json';
+                payload.content = JSON.stringify(data);
+                payload.filename = baseName + '.json';
+                formatLabel = 'Компактный JSON';
+            } else if (normalizedFormat === 'yaml') {
+                payload.format = 'yaml';
+                payload.mime = 'application/x-yaml';
+                payload.extension = 'yaml';
+                payload.filename = baseName + '.yaml';
+                payload.content = this.convertObjectToYaml(data);
+                formatLabel = 'YAML';
+            } else {
+                payload.format = 'json-pretty';
+                payload.content = JSON.stringify(data, null, 2);
+                payload.filename = baseName + '.json';
+                formatLabel = 'Читаемый JSON';
+            }
+
+            payload.meta = formatLabel + ' • ' + scopeDescription + '. Всего схем: ' + count + '.';
+
+            return payload;
+        },
+
+        refreshSchemasExportModal: function () {
+            var $modal = $('#schema-export');
+            if (!$modal.length) {
+                return;
+            }
+
+            var modalInstance = $modal.data('bs.modal');
+            var isShown = false;
+            if (modalInstance && typeof modalInstance.isShown !== 'undefined') {
+                isShown = modalInstance.isShown;
+            } else if ($modal.hasClass('in') || $modal.is(':visible')) {
+                isShown = true;
+            }
+
+            if (!isShown) {
+                return;
+            }
+
+            this.prepareSchemasExport($modal);
         },
 
         renderSchemasCollectionFilterOptions: function () {
@@ -1796,7 +2150,17 @@
                 items.push(schema);
             }
 
-            items.sort(function (a, b) {
+            return items;
+        },
+
+        sortSchemasByUpdated: function (items) {
+            if (!Array.isArray(items)) {
+                return [];
+            }
+
+            var sorted = items.slice();
+
+            sorted.sort(function (a, b) {
                 var aTime = a && a.updatedIso ? Date.parse(a.updatedIso) : 0;
                 var bTime = b && b.updatedIso ? Date.parse(b.updatedIso) : 0;
 
@@ -1808,13 +2172,15 @@
                 }
 
                 if (aTime === bTime) {
-                    return (a.name || '').localeCompare(b.name || '', 'ru');
+                    var aName = a && a.name ? a.name : '';
+                    var bName = b && b.name ? b.name : '';
+                    return aName.localeCompare(bName, 'ru');
                 }
 
                 return bTime - aTime;
             });
 
-            return items;
+            return sorted;
         },
 
         renderSchemasTable: function () {
@@ -1824,7 +2190,7 @@
             }
 
             var filters = this.getSchemaFilters();
-            var items = this.filterSchemasDataset(filters);
+            var items = this.sortSchemasByUpdated(this.filterSchemasDataset(filters));
             var $tbody = $table.find('tbody');
             $tbody.empty();
 
@@ -1866,6 +2232,7 @@
 
             this.highlightSchemasSelection();
             this.updateSchemaPreview();
+            this.refreshSchemasExportModal();
         },
 
         highlightSchemasSelection: function () {
@@ -1895,6 +2262,7 @@
             this.schemasCurrentSelectionId = schema.id;
             this.highlightSchemasSelection();
             this.updateSchemaPreview();
+            this.refreshSchemasExportModal();
         },
 
         findSchemaById: function (id) {
@@ -3593,6 +3961,137 @@
 
                 console.info('Collections bulk action', action, selected);
             });
+        },
+
+        cloneForExport: function (value) {
+            if (typeof value === 'undefined' || value === null) {
+                return null;
+            }
+
+            try {
+                return JSON.parse(JSON.stringify(value));
+            } catch (error) {
+                if (typeof $ !== 'undefined' && $.extend) {
+                    var target = Array.isArray(value) ? [] : {};
+                    return $.extend(true, target, value);
+                }
+
+                return value;
+            }
+        },
+
+        convertObjectToYaml: function (value) {
+            var indent = function (level) {
+                var result = '';
+                for (var i = 0; i < level; i++) {
+                    result += '  ';
+                }
+                return result;
+            };
+
+            var needsQuotes = function (str) {
+                if (str === '') {
+                    return true;
+                }
+                if (/^\s|\s$/.test(str)) {
+                    return true;
+                }
+                if (/[:{}\[\],&*#?]|^-|[!%@`]/.test(str)) {
+                    return true;
+                }
+                if (/^[-+]?\d+(?:\.\d+)?$/.test(str)) {
+                    return true;
+                }
+                if (/^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF|null|Null|NULL|~)$/.test(str)) {
+                    return true;
+                }
+                return false;
+            };
+
+            var escapeQuoted = function (str) {
+                return str.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            };
+
+            var serialize = function (input, level) {
+                if (input === null || typeof input === 'undefined') {
+                    return 'null';
+                }
+
+                if (typeof input === 'number' || typeof input === 'boolean') {
+                    return String(input);
+                }
+
+                if (typeof input === 'string') {
+                    if (/\r|\n/.test(input)) {
+                        var lines = input.split(/\r?\n/);
+                        var blockIndent = indent(level + 1);
+                        var block = lines.map(function (line) {
+                            return blockIndent + line;
+                        }).join('\n');
+                        return '|' + '\n' + block;
+                    }
+
+                    if (needsQuotes(input)) {
+                        return '"' + escapeQuoted(input) + '"';
+                    }
+
+                    return input;
+                }
+
+                if (Array.isArray(input)) {
+                    if (!input.length) {
+                        return '[]';
+                    }
+
+                    var parts = [];
+                    for (var i = 0; i < input.length; i++) {
+                        var item = serialize(input[i], level + 1);
+                        var prefix = indent(level) + '- ';
+                        if (item.indexOf('\n') !== -1) {
+                            var itemLines = item.split('\n');
+                            var firstLine = itemLines.shift();
+                            var rest = itemLines.map(function (line) {
+                                return indent(level + 1) + line;
+                            });
+                            parts.push(prefix + firstLine + (rest.length ? '\n' + rest.join('\n') : ''));
+                        } else {
+                            parts.push(prefix + item);
+                        }
+                    }
+
+                    return parts.join('\n');
+                }
+
+                if (typeof input === 'object') {
+                    var keys = Object.keys(input);
+                    if (!keys.length) {
+                        return '{}';
+                    }
+
+                    var lines = [];
+                    for (var k = 0; k < keys.length; k++) {
+                        var key = keys[k];
+                        var value = serialize(input[key], level + 1);
+                        var safeKey = /^[A-Za-z0-9_]+$/.test(key) ? key : '"' + escapeQuoted(key) + '"';
+                        var prefix = indent(level) + safeKey + ':';
+
+                        if (value.indexOf('\n') !== -1) {
+                            var valueLines = value.split('\n').map(function (line) {
+                                return indent(level + 1) + line;
+                            }).join('\n');
+                            lines.push(prefix + '\n' + valueLines);
+                        } else {
+                            lines.push(prefix + ' ' + value);
+                        }
+                    }
+
+                    return lines.join('\n');
+                }
+
+                return 'null';
+            };
+
+            return serialize(value, 0);
         },
 
         escapeHtml: function (value) {

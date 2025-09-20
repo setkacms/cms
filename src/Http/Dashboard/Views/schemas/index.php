@@ -168,6 +168,70 @@ JS);
     </div>
 </div>
 
+<div class="modal fade" id="schema-export" tabindex="-1" role="dialog" aria-labelledby="schema-export-label">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                <h4 class="modal-title" id="schema-export-label">Экспорт схем</h4>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted">Подготовьте JSON или YAML с описанием схем и скачайте файл или скопируйте результат.</p>
+                <div class="alert alert-warning" data-role="schemas-export-empty" style="display: none;">
+                    <i class="fa fa-info-circle"></i>
+                    <span data-role="schemas-export-empty-message">Выберите схему или измените область экспорта.</span>
+                </div>
+                <div class="form-group">
+                    <label class="control-label" for="schemas-export-format">Формат экспорта</label>
+                    <select class="form-control" id="schemas-export-format" data-role="schemas-export-format">
+                        <option value="json-pretty">JSON (читабельный)</option>
+                        <option value="json">JSON (компактный)</option>
+                        <option value="yaml">YAML</option>
+                    </select>
+                    <p class="help-block">Выберите формат, чтобы подготовить данные к скачиванию или копированию.</p>
+                </div>
+                <div class="form-group">
+                    <label class="control-label">Содержимое</label>
+                    <div class="radio">
+                        <label>
+                            <input type="radio" name="schemas-export-scope" value="current" checked data-role="schemas-export-scope">
+                            Только выбранная схема
+                        </label>
+                    </div>
+                    <div class="radio">
+                        <label>
+                            <input type="radio" name="schemas-export-scope" value="filtered" data-role="schemas-export-scope">
+                            Все схемы из текущего списка
+                        </label>
+                    </div>
+                    <div class="radio">
+                        <label>
+                            <input type="radio" name="schemas-export-scope" value="all" data-role="schemas-export-scope">
+                            Весь набор схем
+                        </label>
+                    </div>
+                    <p class="help-block">Укажите, какие схемы следует включить в экспорт.</p>
+                </div>
+                <div class="form-group" data-role="schemas-export-result-container">
+                    <label class="control-label" for="schemas-export-result">Предпросмотр</label>
+                    <textarea class="form-control" id="schemas-export-result" rows="8" readonly data-role="schemas-export-result"></textarea>
+                    <p class="help-block" data-role="schemas-export-meta"></p>
+                    <p class="help-block" data-role="schemas-export-feedback"></p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="#" class="btn btn-primary" data-role="schemas-export-download" download style="display: none;">
+                    <i class="fa fa-download"></i> Скачать файл
+                </a>
+                <button type="button" class="btn btn-default" data-action="schemas-copy-export" disabled>
+                    <i class="fa fa-clipboard"></i> Копировать
+                </button>
+                <button type="button" class="btn btn-default" data-dismiss="modal">Закрыть</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script type="application/json" data-role="schemas-dataset">
     <?= Json::htmlEncode($schemasDataset) . "\n" ?>
 </script>

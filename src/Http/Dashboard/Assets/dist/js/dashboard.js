@@ -5,6 +5,7 @@
         activityTable: null,
         collectionsTable: null,
         collectionsSelection: {},
+        collectionsExportFormat: 'json-pretty',
         collectionSavedViews: [],
         currentSavedViewId: null,
         isApplyingSavedView: false,
@@ -75,6 +76,7 @@
             this.initCollectionsSavedViews();
             this.initSchemasModule();
             this.bindCollectionsActionBar();
+            this.initCollectionsExport();
             this.initCollectionEntriesModule();
             this.initRelationsModule();
             this.initMediaLibraryModule();
@@ -776,6 +778,8 @@
             if ($feedback.length && count === 0) {
                 $feedback.text('').removeClass('text-danger text-success');
             }
+
+            this.refreshCollectionsExportModal();
         },
 
         syncCollectionsSelectAllState: function ($table) {
@@ -1883,6 +1887,254 @@
 
                 window.location.href = '/dashboard/collections/settings?handle=' + encodeURIComponent(selected.handle);
             });
+        },
+
+        initCollectionsExport: function () {
+            var self = this;
+
+            $(document).on('click', "[data-action='export-collections']", function (event) {
+                event.preventDefault();
+
+                var $button = $(this);
+                var target = $button.data('target');
+                var $modal = target ? $(target) : $('#collections-export');
+
+                if (!$modal.length) {
+                    console.warn('Модальное окно экспорта коллекций не найдено.');
+                    return;
+                }
+
+                self.prepareCollectionsExport($modal);
+
+                if (typeof $modal.modal === 'function') {
+                    $modal.modal('show');
+                } else {
+                    $modal.show();
+                }
+            });
+
+            $(document).on('shown.bs.modal', '#collections-export', function () {
+                self.prepareCollectionsExport($(this));
+            });
+
+            $(document).on('change', "[data-role='collections-export-format']", function () {
+                var $select = $(this);
+                var format = String($select.val() || '').toLowerCase();
+                if (!format) {
+                    format = 'json-pretty';
+                    $select.val(format);
+                }
+
+                self.collectionsExportFormat = format;
+
+                var $modal = $select.closest('.modal');
+                self.prepareCollectionsExport($modal);
+            });
+
+            $(document).on('click', "[data-action='collections-copy-export']", function (event) {
+                event.preventDefault();
+
+                var $button = $(this);
+                if ($button.prop('disabled')) {
+                    return;
+                }
+
+                var $modal = $button.closest('.modal');
+                var $textarea = $modal.find("[data-role='collections-export-result']");
+                if (!$textarea.length) {
+                    return;
+                }
+
+                $textarea.trigger('select');
+
+                var success = false;
+                try {
+                    success = document.execCommand('copy');
+                } catch (error) {
+                    success = false;
+                }
+
+                var $feedback = $modal.find("[data-role='collections-export-feedback']");
+                if ($feedback.length) {
+                    $feedback.removeClass('text-success text-danger');
+                    if (success) {
+                        $feedback.addClass('text-success').text('Экспортированные данные скопированы в буфер обмена.');
+                    } else {
+                        $feedback.addClass('text-danger').text('Не удалось скопировать данные автоматически. Скопируйте их вручную.');
+                    }
+                }
+            });
+        },
+
+        prepareCollectionsExport: function ($modal) {
+            if (!$modal || !$modal.length) {
+                return;
+            }
+
+            var $formatSelect = $modal.find("[data-role='collections-export-format']");
+            var selected = this.getSelectedCollections();
+            var format = this.collectionsExportFormat || 'json-pretty';
+
+            if ($formatSelect.length) {
+                var currentValue = String($formatSelect.val() || '').toLowerCase();
+                if (!currentValue) {
+                    currentValue = format;
+                    $formatSelect.val(currentValue);
+                }
+                if (currentValue !== format) {
+                    format = currentValue;
+                }
+            }
+
+            this.collectionsExportFormat = format;
+
+            var $empty = $modal.find("[data-role='collections-export-empty']");
+            var $resultContainer = $modal.find("[data-role='collections-export-result-container']");
+            var $result = $modal.find("[data-role='collections-export-result']");
+            var $meta = $modal.find("[data-role='collections-export-meta']");
+            var $feedback = $modal.find("[data-role='collections-export-feedback']");
+            var $download = $modal.find("[data-role='collections-export-download']");
+            var $copyButton = $modal.find("[data-action='collections-copy-export']");
+
+            if ($feedback.length) {
+                $feedback.removeClass('text-success text-danger').text('');
+            }
+
+            if (!selected.length) {
+                if ($empty.length) {
+                    $empty.show();
+                }
+                if ($resultContainer.length) {
+                    $resultContainer.hide();
+                }
+                if ($result.length) {
+                    $result.val('');
+                }
+                if ($meta.length) {
+                    $meta.text('');
+                }
+                if ($download.length) {
+                    $download.hide().removeAttr('href').removeAttr('download');
+                }
+                if ($copyButton.length) {
+                    $copyButton.prop('disabled', true);
+                }
+                return;
+            }
+
+            if ($empty.length) {
+                $empty.hide();
+            }
+            if ($resultContainer.length) {
+                $resultContainer.show();
+            }
+
+            var payload = this.buildCollectionsExportPayload(selected, format);
+            this.collectionsExportFormat = payload.format || format;
+
+            if ($formatSelect.length) {
+                $formatSelect.val(this.collectionsExportFormat);
+            }
+
+            if ($result.length) {
+                $result.val(payload.content || '');
+            }
+
+            if ($meta.length) {
+                var metaText = payload.meta || '';
+                if (metaText) {
+                    metaText += ' ';
+                }
+                metaText += 'Используйте кнопки ниже, чтобы скопировать или скачать результат.';
+                $meta.text(metaText);
+            }
+
+            if ($download.length) {
+                if (payload.content) {
+                    var href = 'data:' + (payload.mime || 'application/octet-stream') + ';charset=utf-8,' +
+                        encodeURIComponent(payload.content);
+                    $download.attr({
+                        href: href,
+                        download: payload.filename || 'collections-export.txt'
+                    }).show();
+                } else {
+                    $download.hide().removeAttr('href').removeAttr('download');
+                }
+            }
+
+            if ($copyButton.length) {
+                $copyButton.prop('disabled', !payload.content);
+            }
+        },
+
+        buildCollectionsExportPayload: function (selected, format) {
+            var normalizedFormat = (format || '').toLowerCase();
+            if (!normalizedFormat) {
+                normalizedFormat = 'json-pretty';
+            }
+
+            var now = new Date();
+            var pad = function (value) {
+                return value < 10 ? '0' + value : String(value);
+            };
+            var datePart = now.getFullYear() + '-' + pad(now.getMonth() + 1) + '-' + pad(now.getDate());
+            var baseName = 'collections-export-' + datePart;
+
+            var payload = {
+                format: normalizedFormat,
+                mime: 'application/json',
+                extension: 'json',
+                filename: baseName + '.json',
+                content: '',
+                meta: ''
+            };
+
+            var data = {
+                generatedAt: now.toISOString(),
+                total: selected.length,
+                collections: selected
+            };
+
+            if (normalizedFormat === 'json') {
+                payload.content = JSON.stringify(data);
+                payload.meta = 'Компактный JSON с ' + selected.length + ' коллекциями.';
+            } else if (normalizedFormat === 'handles-list') {
+                var handles = selected.map(function (item) {
+                    return item.handle || ('collection-' + item.id);
+                });
+                payload.mime = 'text/plain';
+                payload.extension = 'txt';
+                payload.filename = baseName + '.txt';
+                payload.content = handles.join('\n');
+                payload.meta = 'Список handle: по одной записи на строку (' + handles.length + ').';
+            } else {
+                payload.format = 'json-pretty';
+                payload.content = JSON.stringify(data, null, 2);
+                payload.meta = 'Читаемый JSON с ' + selected.length + ' коллекциями.';
+            }
+
+            return payload;
+        },
+
+        refreshCollectionsExportModal: function () {
+            var $modal = $('#collections-export');
+            if (!$modal.length) {
+                return;
+            }
+
+            var modalInstance = $modal.data('bs.modal');
+            var isShown = false;
+            if (modalInstance && typeof modalInstance.isShown !== 'undefined') {
+                isShown = modalInstance.isShown;
+            } else if ($modal.hasClass('in') || $modal.is(':visible')) {
+                isShown = true;
+            }
+
+            if (!isShown) {
+                return;
+            }
+
+            this.prepareCollectionsExport($modal);
         },
 
         bindCollectionsBulkActions: function () {

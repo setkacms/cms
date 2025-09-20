@@ -82,6 +82,44 @@ final class ElementVersion
         $this->archivedAt = $archivedAt;
     }
 
+    public function markPersisted(
+        int $id,
+        ?DateTimeImmutable $createdAt = null,
+        ?DateTimeImmutable $updatedAt = null,
+        ?DateTimeImmutable $publishedAt = null,
+        ?DateTimeImmutable $archivedAt = null
+    ): void {
+        if ($id <= 0) {
+            throw new InvalidArgumentException('Persisted identifier must be positive.');
+        }
+
+        $this->id = $id;
+
+        if ($createdAt !== null) {
+            $this->createdAt = $createdAt;
+        }
+
+        if ($updatedAt !== null) {
+            $this->updatedAt = $updatedAt;
+        }
+
+        if ($publishedAt !== null || $this->publishedAt !== null) {
+            $this->publishedAt = $publishedAt;
+        }
+
+        if ($archivedAt !== null || $this->archivedAt !== null) {
+            $this->archivedAt = $archivedAt;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $values
+     */
+    public function replaceValues(array $values): void
+    {
+        $this->values = $this->normaliseValues($values);
+    }
+
     public function getElement(): Element
     {
         return $this->element;

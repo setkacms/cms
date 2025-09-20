@@ -19,9 +19,12 @@ declare(strict_types=1);
 
 namespace Setka\Cms\Infrastructure\DBAL\Repositories;
 
+use DateTimeImmutable;
 use InvalidArgumentException;
+use JsonException;
 use Setka\Cms\Contracts\Elements\ElementRepositoryInterface;
 use Setka\Cms\Contracts\Elements\ElementStatus;
+use Setka\Cms\Contracts\Elements\ElementVersionRepositoryInterface;
 use Setka\Cms\Contracts\Elements\PublicationPlan;
 use Setka\Cms\Domain\Elements\Collection;
 use Setka\Cms\Domain\Elements\CollectionStructure;
@@ -33,10 +36,14 @@ use Setka\Cms\Domain\Workspaces\Workspace;
 use Throwable;
 use yii\db\Connection;
 use yii\db\Query;
+use function json_encode;
 
 final class ElementRepository implements ElementRepositoryInterface
 {
-    public function __construct(private readonly Connection $db)
+    public function __construct(
+        private readonly Connection $db,
+        private readonly ElementVersionRepositoryInterface $versionRepository
+    )
     {
     }
 
@@ -60,10 +67,71 @@ final class ElementRepository implements ElementRepositoryInterface
 
     public function save(Workspace $workspace, Element $element, string $locale): void
     {
-        // The current domain model does not expose collection accessor or mutators
-        // for status/timestamps, so a robust save() cannot be implemented yet.
-        // Intentionally left as a no-op until the domain API is expanded.
-        // @see Setka\Cms\Domain\Elements\Element
+        $workspaceId = $this->requireWorkspaceId($workspace);
+        $collection = $element->getCollection();
+        $collectionId = $collection->getId();
+        if ($collectionId === null) {
+            throw new InvalidArgumentException('Collection must be persisted before saving an element.');
+        }
+
+        $collectionWorkspaceId = $collection->getWorkspace()->getId();
+        if ($collectionWorkspaceId !== null && $collectionWorkspaceId !== $workspaceId) {
+            throw new InvalidArgumentException('Element workspace must match collection workspace.');
+        }
+
+        $transaction = $this->db->beginTransaction();
+
+        try {
+            $timestamp = time();
+            $data = [
+                'uid' => $element->getUid(),
+                'collection_id' => $collectionId,
+                'workspace_id' => $workspaceId,
+                'locale' => $element->getLocale(),
+                'slug' => $element->getSlug(),
+                'title' => $element->getTitle(),
+                'status' => $element->getStatus()->value,
+                'schema_id' => $element->getSchemaId(),
+                'publication_plan' => $this->encodePublicationPlan($element->getPublicationPlan()),
+                'parent_id' => $collection->isTree() ? $element->getParentId() : null,
+                'position' => $collection->isTree() ? $element->getPosition() : 0,
+                'lft' => $collection->isTree() ? $element->getLeftBoundary() : null,
+                'rgt' => $collection->isTree() ? $element->getRightBoundary() : null,
+                'depth' => $collection->isTree() ? $element->getDepth() : null,
+                'updated_at' => $timestamp,
+            ];
+
+            $elementId = $element->getId();
+            if ($elementId === null) {
+                $data['created_at'] = $timestamp;
+                $this->db->createCommand()
+                    ->insert('{{%element}}', $data)
+                    ->execute();
+
+                $elementId = (int) $this->db->getLastInsertID();
+                $createdAt = new DateTimeImmutable('@' . $timestamp);
+                $element->markPersisted($elementId, $element->getUid(), $createdAt, $createdAt);
+            } else {
+                $this->db->createCommand()
+                    ->update('{{%element}}', $data, ['id' => $elementId, 'workspace_id' => $workspaceId])
+                    ->execute();
+
+                $element->markPersisted(
+                    $elementId,
+                    $element->getUid(),
+                    $element->getCreatedAt(),
+                    new DateTimeImmutable('@' . $timestamp)
+                );
+            }
+
+            $this->versionRepository->saveForLocale($element, $locale);
+
+            $transaction->commit();
+        } catch (Throwable $exception) {
+            $transaction->rollBack();
+
+            throw $exception;
+        }
     }
 
     public function delete(Workspace $workspace, int $id, string $locale): void
@@ -133,6 +201,8 @@ final class ElementRepository implements ElementRepositoryInterface
             $collection->setTaxonomies(array_values($taxonomyData['taxonomies']));
             $this->hydrateElementTerms($element, $taxonomyData['taxonomies'], $taxonomyData['terms'], $locale);
         }
+
+        $this->versionRepository->load($element);
 
         return $element;
     }
@@ -496,6 +566,19 @@ final class ElementRepository implements ElementRepositoryInterface
         }
 
         return TaxonomyStructure::FLAT;
+    }
+
+    private function encodePublicationPlan(?PublicationPlan $plan): ?string
+    {
+        if ($plan === null) {
+            return null;
+        }
+
+        try {
+            return json_encode($plan->toArray(), JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            return null;
+        }
     }
 }
 

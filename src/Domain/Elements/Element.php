@@ -111,6 +111,31 @@ final class Element implements ElementInterface
         $this->updatedAt = new DateTimeImmutable();
     }
 
+    public function markPersisted(
+        int $id,
+        ?string $uid = null,
+        ?DateTimeImmutable $createdAt = null,
+        ?DateTimeImmutable $updatedAt = null
+    ): void {
+        if ($id <= 0) {
+            throw new InvalidArgumentException('Persisted identifier must be positive.');
+        }
+
+        $this->id = $id;
+
+        if ($uid !== null && $uid !== '') {
+            $this->uid = $uid;
+        }
+
+        if ($createdAt !== null) {
+            $this->createdAt = $createdAt;
+        }
+
+        if ($updatedAt !== null) {
+            $this->updatedAt = $updatedAt;
+        }
+    }
+
     public static function generateUid(): string
     {
         return bin2hex(random_bytes(16));

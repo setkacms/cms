@@ -10,7 +10,9 @@ use Setka\Cms\Domain\Fields\FieldType;
 use Setka\Cms\Contracts\Elements\ElementStatus;
 use Setka\Cms\Domain\Workspaces\Workspace;
 use Setka\Cms\Infrastructure\DBAL\Repositories\ElementRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\ElementVersionRepository;
 use Setka\Cms\Infrastructure\DBAL\Repositories\FieldRepository;
+use Setka\Cms\Infrastructure\DBAL\Repositories\FieldValueRepository;
 use yii\db\Connection;
 use function class_exists;
 use function json_encode;
@@ -29,6 +31,8 @@ final class WorkspaceMultisiteTest extends TestCase
 
     private ElementRepository $elementRepository;
 
+    private FieldValueRepository $fieldValueRepository;
+
     private Workspace $defaultWorkspace;
 
     private Workspace $secondWorkspace;
@@ -45,7 +49,9 @@ final class WorkspaceMultisiteTest extends TestCase
         $this->createSchema();
 
         $this->fieldRepository = new FieldRepository($this->db);
-        $this->elementRepository = new ElementRepository($this->db);
+        $this->fieldValueRepository = new FieldValueRepository($this->db);
+        $versionRepository = new ElementVersionRepository($this->db, $this->fieldValueRepository);
+        $this->elementRepository = new ElementRepository($this->db, $versionRepository);
 
         $this->defaultWorkspace = $this->createWorkspace('default', 'Default', ['en-US']);
         $this->secondWorkspace = $this->createWorkspace('storefront', 'Storefront', ['en-US', 'de-DE']);

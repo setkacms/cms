@@ -35,9 +35,9 @@ final class CollectionsController extends Controller
     ];
 
     private const STATUS_LABELS = [
-        'published' => 'РћРїСѓР±Р»РёРєРѕРІР°РЅРѕ',
-        'draft' => 'Р§РµСЂРЅРѕРІРёРє',
-        'archived' => 'РђСЂС…РёРІ',
+        'published' => 'Опубликовано',
+        'draft' => 'Черновик',
+        'archived' => 'Архив',
     ];
 
     private const STATUS_BADGES = [
@@ -47,10 +47,10 @@ final class CollectionsController extends Controller
     ];
 
     private const STRUCTURE_LABELS = [
-        'flat' => 'РџР»РѕСЃРєР°СЏ',
-        'tree' => 'Р”СЂРµРІРѕРІРёРґРЅР°СЏ',
-        'calendar' => 'РљР°Р»РµРЅРґР°СЂСЊ',
-        'sequence' => 'РџРѕСЃР»РµРґРѕРІР°С‚РµР»СЊРЅРѕСЃС‚СЊ',
+        'flat' => 'Плоская',
+        'tree' => 'Древовидная',
+        'calendar' => 'Календарь',
+        'sequence' => 'Последовательность',
     ];
 
     private InMemoryCollectionEntriesRepository $collectionEntriesRepository;
@@ -91,7 +91,7 @@ final class CollectionsController extends Controller
 
         $collection = $this->findCollectionByHandle($handle);
         if ($collection === null) {
-            throw new NotFoundHttpException('РљРѕР»Р»РµРєС†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°.');
+            throw new NotFoundHttpException('Коллекция не найдена.');
         }
 
         $this->assertCanViewEntries($collection);
@@ -129,7 +129,7 @@ final class CollectionsController extends Controller
     {
         $collection = $this->findCollectionByHandle($handle);
         if ($collection === null) {
-            throw new NotFoundHttpException('РљРѕР»Р»РµРєС†РёСЏ РЅРµ РЅР°Р№РґРµРЅР°.');
+            throw new NotFoundHttpException('Коллекция не найдена.');
         }
 
         $this->assertCanViewEntries($collection);

@@ -38,7 +38,7 @@ final class EntriesController extends Controller
     {
         $collection = $this->collectionsRepository->findByHandle($handle);
         if ($collection === null) {
-            throw new NotFoundHttpException('пїЅ?пїЅ?пїЅ>пїЅ>пїЅпїЅпїЅЕђпїЅ? пїЅ?пїЅпїЅ пїЅ?пїЅпїЅпїЅпїЅпїЅ?пїЅпїЅ?пїЅпїЅ.');
+            throw new NotFoundHttpException('Коллекция не найдена.');
         }
 
         $this->assertCanViewEntries($collection);
@@ -52,7 +52,7 @@ final class EntriesController extends Controller
         } else {
             $entry = $this->findEntry($collection, $normalizedId);
             if ($entry === null) {
-                throw new NotFoundHttpException('Р—Р°РїРёСЃСЊ РєРѕР»Р»РµРєС†РёРё РЅРµ РЅР°Р№РґРµРЅР°.');
+                throw new NotFoundHttpException('Запись коллекции не найдена.');
             }
         }
 

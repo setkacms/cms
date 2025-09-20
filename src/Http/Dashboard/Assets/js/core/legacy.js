@@ -6218,6 +6218,7 @@ const Dashboard = {
                 };
                 self.mediaLibrarySelection = [];
                 self.mediaLibraryViewMode = 'grid';
+                self.mediaLibraryBulkLastResult = null;
 
                 self.populateMediaFilterOptions($library, assets);
                 self.bindMediaLibraryEvents($library);
@@ -6562,6 +6563,14 @@ const Dashboard = {
                 self.outputMediaSelection($library);
             });
 
+            $library.on('click', '[data-action="open-media-bulk"]', function (event) {
+                event.preventDefault();
+                if ($(this).prop('disabled')) {
+                    return;
+                }
+                self.openMediaBulkModal($library);
+            });
+
             $library.on('click', '[data-action="refresh-library"]', function (event) {
                 event.preventDefault();
                 var $loading = $library.find('[data-role="media-loading"]');
@@ -6583,6 +6592,10 @@ const Dashboard = {
             var now = new Date();
 
             return assets.filter(function (asset) {
+                if (!asset) {
+                    return false;
+                }
+
                 if (typeFilter && asset.type !== typeFilter) {
                     return false;
                 }
@@ -6669,6 +6682,10 @@ const Dashboard = {
                 $card.attr('data-type', asset.type);
                 $card.attr('data-collection', asset.collection);
 
+                if (asset.isDeleted) {
+                    $card.addClass('media-library__item--deleted');
+                }
+
                 var $preview = $('<div class="media-library__preview"></div>');
                 if (asset.type === 'image' && asset.thumb) {
                     $preview.append($('<img>').attr('src', asset.thumb).attr('alt', asset.title));
@@ -6698,6 +6715,10 @@ const Dashboard = {
 
                 $caption.append($('<div class="media-library__meta text-muted"></div>').text(meta.join(' • ')));
 
+                if (asset.isDeleted) {
+                    $caption.prepend('<span class="label label-danger media-library__status-label">Помечено к удалению</span>');
+                }
+
                 var viewUrl = self.getMediaViewUrl(asset.id);
                 if (viewUrl) {
                     var $actions = $('<div class="media-library__actions text-right"></div>');
@@ -6724,6 +6745,10 @@ const Dashboard = {
                 $row.attr('data-type', asset.type);
                 $row.attr('data-collection', asset.collection);
 
+                if (asset.isDeleted) {
+                    $row.addClass('media-library__item--deleted');
+                }
+
                 var $title = $('<div class="media-library__list-title"></div>').text(asset.title);
                 var metaParts = [];
                 metaParts.push(self.getMediaTypeLabel(asset.type));
@@ -6747,6 +6772,9 @@ const Dashboard = {
                 }
 
                 var $meta = $('<div class="media-library__list-meta text-muted"></div>').text(metaParts.join(' • '));
+                if (asset.isDeleted) {
+                    $row.append('<span class="label label-danger media-library__status-label">Помечено к удалению</span>');
+                }
                 $row.append($title).append($meta);
 
                 var viewUrl = self.getMediaViewUrl(asset.id);
@@ -7148,6 +7176,19 @@ const Dashboard = {
         updateMediaSelectionSummary: function ($library) {
             var count = this.mediaLibrarySelection.length;
             $library.find('[data-role="selected-count"]').text(count);
+            $library.find('[data-role="bulk-selection-count"]').text(count);
+
+            var $bulkButton = $library.find('[data-action="open-media-bulk"]');
+            if ($bulkButton.length) {
+                $bulkButton.prop('disabled', count === 0);
+                $bulkButton.toggleClass('disabled', count === 0);
+            }
+
+            $(document).trigger('mediaLibrary:selection-changed', {
+                count: count,
+                ids: this.mediaLibrarySelection.slice(),
+                assets: this.getSelectedMediaAssets()
+            });
         },
 
         clearMediaSelection: function ($library) {
@@ -7212,6 +7253,383 @@ const Dashboard = {
             }).filter(function (item) { return item !== null; });
         },
 
+        getSelectedMediaAssets: function () {
+            var self = this;
+            return (this.mediaLibrarySelection || []).map(function (id) {
+                return self.findMediaAsset(id);
+            }).filter(function (asset) {
+                return asset !== null;
+            });
+        },
+
+        openMediaBulkModal: function ($library) {
+            var $modal = this.findInContext($library, '[data-role="media-bulk-modal"]').first();
+            if (!$modal.length) {
+                $modal = $('[data-role="media-bulk-modal"]').first();
+            }
+            if (!$modal.length) {
+                return;
+            }
+
+            $modal.data('mediaLibraryRoot', $library || null);
+            $modal.modal('show');
+        },
+
+        refreshMediaFiltersCatalog: function ($library) {
+            this.updateMediaCollectionFilter($library);
+            this.updateMediaTagsFilter($library);
+        },
+
+        updateMediaCollectionFilter: function ($library) {
+            var $select = this.findInContext($library, '[data-role="media-filter-collection"]').first();
+            if (!$select.length) {
+                return;
+            }
+
+            var current = $select.val();
+            var options = this.getMediaCollectionsCatalog();
+            if (current && !options.some(function (item) { return item.value === current; })) {
+                options.push({ value: current, label: $select.find('option[value="' + current + '"]').text() || current });
+            }
+
+            var $placeholder = $select.find('option[value=""]').first();
+            $select.find('option').not($placeholder).remove();
+
+            options.sort(function (a, b) {
+                return a.label.localeCompare(b.label);
+            }).forEach(function (item) {
+                var $option = $('<option></option>').attr('value', item.value).text(item.label);
+                $select.append($option);
+            });
+
+            if (current && $select.find('option[value="' + current + '"]').length) {
+                $select.val(current);
+            } else {
+                $select.val('');
+            }
+
+            if ($select.data('select2')) {
+                $select.trigger('change.select2');
+            }
+        },
+
+        updateMediaTagsFilter: function ($library) {
+            var $select = this.findInContext($library, '[data-role="media-filter-tags"]').first();
+            if (!$select.length) {
+                return;
+            }
+
+            var current = $select.val() || [];
+            if (!$.isArray(current)) {
+                current = [current];
+            }
+
+            var options = this.getMediaTagsCatalog();
+            current.forEach(function (tag) {
+                if (!options.some(function (item) { return item.value === tag; })) {
+                    options.push({ value: tag, label: tag });
+                }
+            });
+
+            $select.find('option').remove();
+
+            options.sort(function (a, b) {
+                return a.label.localeCompare(b.label);
+            }).forEach(function (item) {
+                var $option = $('<option></option>').attr('value', item.value).text(item.label);
+                $select.append($option);
+            });
+
+            var nextSelection = current.filter(function (tag) {
+                return options.some(function (item) { return item.value === tag; });
+            });
+            $select.val(nextSelection);
+
+            if ($select.data('select2')) {
+                $select.trigger('change.select2');
+            }
+        },
+
+        getMediaCollectionsCatalog: function () {
+            var map = {};
+            $.each(this.mediaAssetsDataset || [], function (_, asset) {
+                if (!asset || !asset.collection) {
+                    return;
+                }
+                var key = String(asset.collection);
+                if (!map[key]) {
+                    map[key] = asset.collectionName || key;
+                }
+            });
+
+            return Object.keys(map).map(function (key) {
+                return { value: key, label: map[key] };
+            });
+        },
+
+        getMediaCollectionLabel: function (handle) {
+            var key = String(handle || '');
+            if (!key) {
+                return '';
+            }
+
+            var dataset = this.mediaAssetsDataset || [];
+            for (var index = 0; index < dataset.length; index += 1) {
+                var asset = dataset[index];
+                if (asset && asset.collection === key) {
+                    return asset.collectionName || key;
+                }
+            }
+
+            return key;
+        },
+
+        getMediaTagsCatalog: function () {
+            var map = {};
+            $.each(this.mediaAssetsDataset || [], function (_, asset) {
+                if (!asset || !$.isArray(asset.tags)) {
+                    return;
+                }
+
+                $.each(asset.tags, function (_, tag) {
+                    var value = $.trim(String(tag || ''));
+                    if (!value) {
+                        return;
+                    }
+                    map[value] = true;
+                });
+            });
+
+            return Object.keys(map).map(function (tag) {
+                return { value: tag, label: tag };
+            });
+        },
+
+        pruneMediaSelection: function (ids) {
+            if (!$.isArray(ids) || !ids.length) {
+                return;
+            }
+
+            var removalMap = {};
+            ids.forEach(function (id) {
+                removalMap[String(id)] = true;
+            });
+
+            this.mediaLibrarySelection = this.mediaLibrarySelection.filter(function (id) {
+                return !removalMap[String(id)];
+            });
+        },
+
+        applyMediaBulkTags: function ($library, options) {
+            var opts = options || {};
+            var normalizeList = function (items) {
+                var seen = {};
+                var list = [];
+                var source = items;
+                if (!source) {
+                    source = [];
+                } else if (!$.isArray(source)) {
+                    source = [source];
+                }
+
+                source.forEach(function (value) {
+                    var normalized = $.trim(String(value || ''));
+                    if (!normalized) {
+                        return;
+                    }
+                    if (seen[normalized]) {
+                        return;
+                    }
+                    seen[normalized] = true;
+                    list.push(normalized);
+                });
+                return list;
+            };
+
+            var add = normalizeList(opts.add);
+            var remove = normalizeList(opts.remove);
+            var replace = opts.replace === true;
+
+            var assets = this.getSelectedMediaAssets();
+            var self = this;
+            var changed = [];
+
+            assets.forEach(function (asset) {
+                if (!asset) {
+                    return;
+                }
+
+                var currentTags = $.isArray(asset.tags) ? asset.tags.slice() : [];
+                var nextTags = replace ? [] : currentTags.slice();
+
+                if (remove.length) {
+                    nextTags = nextTags.filter(function (tag) {
+                        return remove.indexOf(tag) === -1;
+                    });
+                }
+
+                if (add.length) {
+                    add.forEach(function (tag) {
+                        if (nextTags.indexOf(tag) === -1) {
+                            nextTags.push(tag);
+                        }
+                    });
+                }
+
+                nextTags = nextTags.map(function (tag) { return $.trim(String(tag)); })
+                    .filter(function (tag) { return tag !== ''; })
+                    .sort();
+
+                var original = currentTags.slice().sort();
+                var differs = nextTags.length !== original.length;
+                if (!differs) {
+                    for (var index = 0; index < nextTags.length; index += 1) {
+                        if (nextTags[index] !== original[index]) {
+                            differs = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (differs) {
+                    asset.tags = nextTags;
+                    self.touchMediaAsset(asset);
+                    self.updateMediaAsset(asset);
+                    changed.push(asset);
+                }
+            });
+
+            if (changed.length) {
+                this.refreshMediaFiltersCatalog($library);
+                this.renderMediaLibrary($library);
+            } else {
+                this.syncMediaSelectionUI($library);
+            }
+
+            this.mediaLibraryBulkLastResult = {
+                type: 'tags',
+                payload: { add: add, remove: remove, replace: replace },
+                changed: changed
+            };
+
+            return {
+                total: assets.length,
+                changed: changed,
+                add: add,
+                remove: remove,
+                replace: replace
+            };
+        },
+
+        applyMediaBulkCollection: function ($library, options) {
+            var opts = options || {};
+            var target = $.trim(String(opts.collection || ''));
+            if (!target) {
+                this.syncMediaSelectionUI($library);
+                return {
+                    total: this.mediaLibrarySelection.length,
+                    changed: [],
+                    collection: '',
+                    collectionName: ''
+                };
+            }
+
+            var label = $.trim(String(opts.collectionName || this.getMediaCollectionLabel(target) || target));
+
+            var assets = this.getSelectedMediaAssets();
+            var self = this;
+            var changed = [];
+
+            assets.forEach(function (asset) {
+                if (!asset) {
+                    return;
+                }
+
+                if (asset.collection === target && asset.collectionName === label) {
+                    return;
+                }
+
+                asset.collection = target;
+                asset.collectionName = label;
+                self.touchMediaAsset(asset);
+                self.updateMediaAsset(asset);
+                changed.push(asset);
+            });
+
+            if (changed.length) {
+                this.refreshMediaFiltersCatalog($library);
+                this.renderMediaLibrary($library);
+            } else {
+                this.syncMediaSelectionUI($library);
+            }
+
+            this.mediaLibraryBulkLastResult = {
+                type: 'collection',
+                payload: { collection: target, collectionName: label },
+                changed: changed
+            };
+
+            return {
+                total: assets.length,
+                changed: changed,
+                collection: target,
+                collectionName: label
+            };
+        },
+
+        applyMediaBulkDeletion: function ($library, options) {
+            var opts = options || {};
+            var mode = String(opts.mode || 'delete');
+            var markDeleted = mode !== 'restore';
+
+            var assets = this.getSelectedMediaAssets();
+            var self = this;
+            var changed = [];
+            var removedIds = [];
+
+            assets.forEach(function (asset) {
+                if (!asset) {
+                    return;
+                }
+
+                var current = !!asset.isDeleted;
+                if (current === markDeleted) {
+                    return;
+                }
+
+                asset.isDeleted = markDeleted;
+                self.touchMediaAsset(asset);
+                self.updateMediaAsset(asset);
+                changed.push(asset);
+
+                if (markDeleted) {
+                    removedIds.push(asset.id);
+                }
+            });
+
+            if (removedIds.length) {
+                this.pruneMediaSelection(removedIds);
+            }
+
+            if (changed.length) {
+                this.renderMediaLibrary($library);
+            } else {
+                this.syncMediaSelectionUI($library);
+            }
+
+            this.mediaLibraryBulkLastResult = {
+                type: 'deletion',
+                payload: { mode: mode },
+                changed: changed
+            };
+
+            return {
+                total: assets.length,
+                changed: changed,
+                mode: mode
+            };
+        },
+
         findMediaAsset: function (assetId) {
             var key = String(assetId || '');
             if (!key) {
@@ -7267,6 +7685,14 @@ const Dashboard = {
                     }
                 }
             }
+        },
+
+        touchMediaAsset: function (asset) {
+            if (!asset) {
+                return;
+            }
+
+            asset.updatedAt = new Date().toISOString();
         },
 
         formatFileSize: function (bytes) {

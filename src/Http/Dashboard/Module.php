@@ -36,6 +36,7 @@ use yii\base\Module as BaseModule;
 class Module extends BaseModule
 {
     public $controllerNamespace = 'Setka\\Cms\\Http\\Dashboard\\Controllers';
+    public $defaultRoute = 'index';
 
     public function init(): void
     {

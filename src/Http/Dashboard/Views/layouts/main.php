@@ -13,6 +13,20 @@ if (Yii::$app->controller->action->id === 'login') {
     );
     return;
 }
+/** @var yii\web\Controller|null $controller */
+$controller = Yii::$app->controller;
+$pageId = null;
+
+if ($controller !== null && $controller->action !== null) {
+    $pageId = DashboardAsset::formatPageId($controller->id, $controller->action->id);
+
+    if ($pageId !== '') {
+        $this->params[DashboardAsset::PAGE_ID_PARAM] = $pageId;
+    } else {
+        $pageId = null;
+    }
+}
+
 DashboardAsset::register($this);
 $directoryAsset = Yii::$app->assetManager->getPublishedUrl('@vendor/almasaeed2010/adminlte/dist');
 ?>
@@ -27,7 +41,16 @@ $directoryAsset = Yii::$app->assetManager->getPublishedUrl('@vendor/almasaeed201
     <link href="https://fonts.cdnfonts.com/css/pt-root-ui" rel="stylesheet">
     <?php $this->head() ?>
 </head>
-<body class="skin-blue sidebar-mini">
+<?php
+$bodyAttributes = [
+    'class' => 'skin-blue sidebar-mini',
+];
+
+if ($pageId !== null) {
+    $bodyAttributes['data-page'] = $pageId;
+}
+?>
+<body <?= Html::renderTagAttributes($bodyAttributes) ?>>
 <?php $this->beginBody() ?>
 <div class="wrapper">
 

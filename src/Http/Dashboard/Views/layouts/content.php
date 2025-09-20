@@ -1,8 +1,13 @@
 <?php
-use yii\widgets\Breadcrumbs;
 use dmstr\widgets\Alert;
+use Yii;
+use yii\helpers\Html;
+use yii\widgets\Breadcrumbs;
+
+$route = Yii::$app->controller->route ?? '';
+$pageId = $route === 'index/index' ? 'dashboard' : str_replace('/', '.', $route);
 ?>
-<div class="content-wrapper">
+<div class="content-wrapper"<?= $pageId !== '' ? ' data-page="' . Html::encode($pageId) . '"' : '' ?>>
     <section class="content-header">
         <h1>
             <?php

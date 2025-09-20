@@ -1,4 +1,4 @@
-﻿<?php declare(strict_types=1);
+<?php declare(strict_types=1);
 
 
 
@@ -32,6 +32,66 @@ final class EntriesController extends Controller
         $this->entriesRepository = $entriesRepository ?? new InMemoryCollectionEntriesRepository();
         $this->collectionsRepository = $collectionsRepository ?? new InMemoryCollectionsRepository();
         parent::__construct($id, $module, $config);
+    }
+
+    public function actionIndex(): string
+    {
+        $collections = $this->getAccessibleCollections();
+
+        $processedCollections = [];
+        $localesIndex = [];
+
+        foreach ($collections as $collection) {
+            $handle = (string) ($collection['handle'] ?? '');
+            if ($handle === '') {
+                continue;
+            }
+
+            $processedCollections[] = [
+                'handle' => $handle,
+                'name' => (string) ($collection['name'] ?? $handle),
+                'canCreate' => $this->canCreateCollectionEntries($collection),
+                'canBulk' => $this->canBulkCollectionEntries($collection),
+            ];
+
+            foreach ($collection['locales'] ?? [] as $locale) {
+                $code = (string) ($locale['code'] ?? '');
+                if ($code === '') {
+                    continue;
+                }
+
+                $localesIndex[$code] = [
+                    'code' => $code,
+                    'label' => (string) ($locale['label'] ?? $code),
+                ];
+            }
+        }
+
+        ksort($localesIndex);
+
+        return $this->render('entries/index', [
+            'collections' => $processedCollections,
+            'statusLabels' => InMemoryCollectionEntriesRepository::STATUS_LABELS,
+            'locales' => array_values($localesIndex),
+            'savedViews' => $this->entriesRepository->getGlobalSavedViews(),
+            'permissions' => [
+                'createEntries' => $this->canCreateInAnyCollection($collections),
+                'bulkActions' => $this->canBulkInAnyCollection($collections),
+            ],
+        ]);
+    }
+
+    public function actionData(): Response
+    {
+        $response = Yii::$app->response;
+        $response->format = Response::FORMAT_JSON;
+
+        $response->data = $this->entriesRepository->getAggregatedDataTableResponse(
+            $this->getAccessibleCollections(),
+            Yii::$app->request->get()
+        );
+
+        return $response;
     }
 
     public function actionEdit(string $handle, string $id): Response
@@ -187,6 +247,91 @@ final class EntriesController extends Controller
             'taxonomies' => $taxonomies,
             'parent_id' => null,
         ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    private function getAccessibleCollections(): array
+    {
+        $accessible = [];
+        foreach ($this->collectionsRepository->all() as $collection) {
+            if ($this->canViewCollectionEntries($collection)) {
+                $accessible[] = $collection;
+            }
+        }
+
+        return $accessible;
+    }
+
+    private function canViewCollectionEntries(array $collection): bool
+    {
+        $user = Yii::$app->user;
+        if ($user === null || $user->isGuest) {
+            return false;
+        }
+
+        if (!$user->can('collections.viewEntries')) {
+            return false;
+        }
+
+        return ($collection['permissions']['viewEntries'] ?? true) === true;
+    }
+
+    private function canCreateCollectionEntries(array $collection): bool
+    {
+        $user = Yii::$app->user;
+        if ($user === null || $user->isGuest) {
+            return false;
+        }
+
+        if (!$user->can('collections.createEntries')) {
+            return false;
+        }
+
+        return ($collection['permissions']['createEntries'] ?? true) === true;
+    }
+
+    private function canBulkCollectionEntries(array $collection): bool
+    {
+        $user = Yii::$app->user;
+        if ($user === null || $user->isGuest) {
+            return false;
+        }
+
+        if (!$user->can('collections.bulkEntries')) {
+            return false;
+        }
+
+        return ($collection['permissions']['bulkActions'] ?? true) === true;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $collections
+     */
+    private function canCreateInAnyCollection(array $collections): bool
+    {
+        foreach ($collections as $collection) {
+            if ($this->canCreateCollectionEntries($collection)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $collections
+     */
+    private function canBulkInAnyCollection(array $collections): bool
+    {
+        foreach ($collections as $collection) {
+            if ($this->canBulkCollectionEntries($collection)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
 

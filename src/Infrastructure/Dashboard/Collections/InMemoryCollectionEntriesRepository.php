@@ -44,6 +44,41 @@ final class InMemoryCollectionEntriesRepository
         8 => 'published_at',
     ];
 
+    private const GLOBAL_COLUMN_MAP = [
+        1 => 'title',
+        2 => 'collection',
+        3 => 'status',
+        4 => 'locale',
+        5 => 'author',
+        6 => 'updated_at',
+        7 => 'published_at',
+    ];
+
+    private const GLOBAL_SAVED_VIEWS = [
+        [
+            'id' => 'recent-published',
+            'name' => 'Недавние публикации',
+            'filters' => [
+                'statuses' => ['published', 'scheduled'],
+                'updated_from' => '2025-03-01',
+            ],
+        ],
+        [
+            'id' => 'drafts-all',
+            'name' => 'Черновики и ревью',
+            'filters' => [
+                'statuses' => ['draft', 'review'],
+            ],
+        ],
+        [
+            'id' => 'by-interviews',
+            'name' => 'Интервью',
+            'filters' => [
+                'collections' => ['interviews'],
+            ],
+        ],
+    ];
+
     /**
      * @var array<string, array<int, array<string, mixed>>>
      */
@@ -374,6 +409,94 @@ final class InMemoryCollectionEntriesRepository
                 'position' => 3,
             ],
         ],
+        'news' => [
+            [
+                'id' => 3001,
+                'title' => 'Обновление платформы: март',
+                'slug' => 'platform-update-march',
+                'status' => 'published',
+                'locale' => 'ru-RU',
+                'updated_at' => '2025-03-06 07:30:00',
+                'published_at' => '2025-03-06 08:00:00',
+                'taxonomies' => [
+                    'regions' => ['moscow'],
+                ],
+                'fields' => [
+                    'author' => 'Редакция новостей',
+                ],
+                'excerpt' => 'Короткие новости о релизах и улучшениях платформы.',
+                'parent_id' => null,
+                'ancestors' => [],
+                'depth' => 0,
+                'position' => 1,
+            ],
+            [
+                'id' => 3002,
+                'title' => 'Команда открывает офис в Казани',
+                'slug' => 'new-office-kazan',
+                'status' => 'draft',
+                'locale' => 'ru-RU',
+                'updated_at' => '2025-03-05 11:00:00',
+                'published_at' => null,
+                'taxonomies' => [
+                    'regions' => ['spb'],
+                ],
+                'fields' => [
+                    'author' => 'Ольга Никитина',
+                ],
+                'excerpt' => 'План запуска региональной команды и события для клиентов.',
+                'parent_id' => null,
+                'ancestors' => [],
+                'depth' => 0,
+                'position' => 2,
+            ],
+        ],
+        'events' => [
+            [
+                'id' => 4001,
+                'title' => 'Весенний вебинар по продукту',
+                'slug' => 'spring-webinar-product',
+                'status' => 'scheduled',
+                'locale' => 'ru-RU',
+                'updated_at' => '2025-03-04 09:15:00',
+                'published_at' => '2025-03-20 11:00:00',
+                'taxonomies' => [
+                    'types' => ['webinar'],
+                ],
+                'fields' => [
+                    'author' => 'Команда мероприятий',
+                    'location' => 'Онлайн',
+                    'capacity' => 250,
+                ],
+                'excerpt' => 'Презентация нового релиза и ответы на вопросы пользователей.',
+                'parent_id' => null,
+                'ancestors' => [],
+                'depth' => 0,
+                'position' => 1,
+            ],
+            [
+                'id' => 4002,
+                'title' => 'Meetup «Редакционный календарь»',
+                'slug' => 'meetup-editorial-calendar',
+                'status' => 'review',
+                'locale' => 'ru-RU',
+                'updated_at' => '2025-03-01 14:45:00',
+                'published_at' => null,
+                'taxonomies' => [
+                    'types' => ['meetup'],
+                ],
+                'fields' => [
+                    'author' => 'Иван Петров',
+                    'location' => 'Москва',
+                    'capacity' => 80,
+                ],
+                'excerpt' => 'Встреча с редакторами и разбор новых шаблонов календаря.',
+                'parent_id' => null,
+                'ancestors' => [],
+                'depth' => 0,
+                'position' => 2,
+            ],
+        ],
     ];
 
     /**
@@ -407,6 +530,72 @@ final class InMemoryCollectionEntriesRepository
         $data = array_map(
             function (array $entry) use ($collection, $taxonomyIndex, $taxonomyLabels): array {
                 return $this->formatEntryRow($entry, $collection, $taxonomyIndex, $taxonomyLabels);
+            },
+            $page
+        );
+
+        return [
+            'draw' => $filters['draw'],
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ];
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getGlobalSavedViews(): array
+    {
+        return self::GLOBAL_SAVED_VIEWS;
+    }
+
+    /**
+     * @param array<int, array<string, mixed>> $collections
+     * @param array<int|string, mixed> $params
+     *
+     * @return array<string, mixed>
+     */
+    public function getAggregatedDataTableResponse(array $collections, array $params): array
+    {
+        $filters = $this->normaliseAggregatedParameters($params);
+
+        $collectionIndex = [];
+        foreach ($collections as $collection) {
+            $handle = (string) ($collection['handle'] ?? '');
+            if ($handle === '') {
+                continue;
+            }
+
+            $collectionIndex[$handle] = $collection;
+        }
+
+        $dataset = [];
+        foreach ($collectionIndex as $handle => $collection) {
+            foreach (self::ENTRIES[$handle] ?? [] as $entry) {
+                $dataset[] = [
+                    'collection' => $collection,
+                    'entry' => $entry,
+                ];
+            }
+        }
+
+        $recordsTotal = count($dataset);
+
+        $filtered = array_values(array_filter(
+            $dataset,
+            function (array $row) use ($filters): bool {
+                return $this->matchesAggregatedFilters($row['entry'], $row['collection'], $filters);
+            }
+        ));
+
+        $recordsFiltered = count($filtered);
+        $sorted = $this->sortAggregatedEntries($filtered, $filters);
+        $page = array_slice($sorted, $filters['start'], $filters['length']);
+
+        $data = array_map(
+            function (array $row): array {
+                return $this->formatAggregatedEntryRow($row['entry'], $row['collection']);
             },
             $page
         );
@@ -548,6 +737,75 @@ final class InMemoryCollectionEntriesRepository
         ];
     }
 
+    private function formatAggregatedEntryRow(array $entry, array $collection): array
+    {
+        $handle = (string) ($collection['handle'] ?? '');
+        $name = (string) ($collection['name'] ?? $handle);
+        $title = (string) ($entry['title'] ?? '');
+
+        $titleHtml = Html::tag('strong', Html::encode($title !== '' ? $title : 'Без названия'));
+
+        $status = (string) ($entry['status'] ?? '');
+        $statusLabel = self::STATUS_LABELS[$status] ?? ucfirst($status);
+        $statusClass = self::STATUS_BADGES[$status] ?? 'label label-default';
+        $statusHtml = Html::tag('span', Html::encode($statusLabel), ['class' => $statusClass]);
+
+        $locale = (string) ($entry['locale'] ?? '');
+        $localeHtml = $locale !== ''
+            ? Html::encode($locale)
+            : Html::tag('span', '—', ['class' => 'text-muted']);
+
+        $authorValue = (string) ($entry['fields']['author'] ?? '');
+        $authorHtml = $authorValue !== ''
+            ? Html::encode($authorValue)
+            : Html::tag('span', '—', ['class' => 'text-muted']);
+
+        $updated = $this->formatDateValue((string) ($entry['updated_at'] ?? ''));
+        $published = ($entry['published_at'] ?? null) !== null
+            ? $this->formatDateValue((string) $entry['published_at'])
+            : '—';
+
+        $collectionHtml = Html::encode($name !== '' ? $name : $handle);
+        if ($handle !== '') {
+            $collectionHtml .= Html::tag('div', Html::tag('code', Html::encode($handle)), ['class' => 'text-muted small']);
+        }
+
+        $key = $handle . ':' . (string) ($entry['id'] ?? '');
+        $checkbox = Html::tag('input', '', [
+            'type' => 'checkbox',
+            'class' => 'entries-checkbox',
+            'data-role' => 'entries-select',
+            'data-key' => $key,
+            'data-id' => (string) ($entry['id'] ?? ''),
+            'data-title' => $title,
+            'data-collection' => $handle,
+            'data-collection-name' => $name,
+            'data-slug' => (string) ($entry['slug'] ?? ''),
+        ]);
+
+        return [
+            'id' => (string) ($entry['id'] ?? ''),
+            'collection_handle' => $handle,
+            'collection_name' => $name,
+            'title' => $titleHtml,
+            'title_plain' => $title,
+            'status' => $statusHtml,
+            'status_raw' => $status,
+            'locale' => $localeHtml,
+            'locale_raw' => $locale,
+            'author' => $authorHtml,
+            'author_raw' => $authorValue,
+            'updated' => Html::encode($updated),
+            'updated_raw' => (string) ($entry['updated_at'] ?? ''),
+            'published' => Html::encode($published),
+            'published_raw' => (string) ($entry['published_at'] ?? ''),
+            'collection' => $collectionHtml,
+            'collection_raw' => mb_strtolower($name !== '' ? $name : $handle),
+            'checkbox' => $checkbox,
+            'key' => $key,
+        ];
+    }
+
     /**
      * @param array<int|string, mixed> $params
      *
@@ -641,6 +899,74 @@ final class InMemoryCollectionEntriesRepository
             'dateFrom' => $dateFrom,
             'dateTo' => $dateTo,
             'parent' => $parent,
+            'orderColumn' => $orderColumn,
+            'orderDirection' => $orderDirection,
+        ];
+    }
+
+    /**
+     * @return array{
+     *     draw: int,
+     *     start: int,
+     *     length: int,
+     *     search: string,
+     *     statuses: array<int, string>,
+     *     locales: array<int, string>,
+     *     collections: array<int, string>,
+     *     dateFrom: ?DateTimeImmutable,
+     *     dateTo: ?DateTimeImmutable,
+     *     orderColumn: int,
+     *     orderDirection: string
+     * }
+     */
+    private function normaliseAggregatedParameters(array $params): array
+    {
+        $draw = isset($params['draw']) ? (int) $params['draw'] : 0;
+        $start = isset($params['start']) ? max(0, (int) $params['start']) : 0;
+        $length = isset($params['length']) ? (int) $params['length'] : 25;
+        if ($length < 1) {
+            $length = 25;
+        }
+
+        $search = '';
+        if (isset($params['search'])) {
+            $searchParam = $params['search'];
+            if (is_array($searchParam) && array_key_exists('value', $searchParam)) {
+                $search = trim((string) $searchParam['value']);
+            } else {
+                $search = trim((string) $searchParam);
+            }
+        }
+
+        $statuses = $this->normaliseStringArray($params['statuses'] ?? $params['status'] ?? []);
+        $locales = $this->normaliseStringArray($params['locales'] ?? $params['locale'] ?? []);
+        $collections = $this->normaliseStringArray($params['collections'] ?? $params['collection'] ?? []);
+
+        $dateFrom = $this->normaliseDate($params['updated_from'] ?? $params['date_from'] ?? null, true);
+        $dateTo = $this->normaliseDate($params['updated_to'] ?? $params['date_to'] ?? null, false);
+
+        $orderColumn = 6;
+        $orderDirection = 'desc';
+        if (isset($params['order']) && is_array($params['order']) && isset($params['order'][0]['column'])) {
+            $orderColumn = (int) $params['order'][0]['column'];
+            $dir = strtolower((string) ($params['order'][0]['dir'] ?? 'desc'));
+            $orderDirection = $dir === 'asc' ? 'asc' : 'desc';
+        } elseif (isset($params['sort']) && is_array($params['sort']) && isset($params['sort']['column'])) {
+            $orderColumn = (int) $params['sort']['column'];
+            $dir = strtolower((string) ($params['sort']['dir'] ?? 'desc'));
+            $orderDirection = $dir === 'asc' ? 'asc' : 'desc';
+        }
+
+        return [
+            'draw' => $draw,
+            'start' => $start,
+            'length' => $length,
+            'search' => $search,
+            'statuses' => $statuses,
+            'locales' => $locales,
+            'collections' => $collections,
+            'dateFrom' => $dateFrom,
+            'dateTo' => $dateTo,
             'orderColumn' => $orderColumn,
             'orderDirection' => $orderDirection,
         ];
@@ -811,6 +1137,60 @@ final class InMemoryCollectionEntriesRepository
         return mb_stripos($haystack, $needle) !== false;
     }
 
+    private function matchesAggregatedFilters(array $entry, array $collection, array $filters): bool
+    {
+        $status = (string) ($entry['status'] ?? '');
+        if ($filters['statuses'] !== [] && !in_array($status, $filters['statuses'], true)) {
+            return false;
+        }
+
+        $locale = (string) ($entry['locale'] ?? '');
+        if ($filters['locales'] !== [] && !in_array($locale, $filters['locales'], true)) {
+            return false;
+        }
+
+        $handle = (string) ($collection['handle'] ?? '');
+        if ($filters['collections'] !== [] && !in_array($handle, $filters['collections'], true)) {
+            return false;
+        }
+
+        $updatedAt = $this->toDateTime((string) ($entry['updated_at'] ?? ''));
+        if ($filters['dateFrom'] instanceof DateTimeImmutable && $updatedAt instanceof DateTimeImmutable && $updatedAt < $filters['dateFrom']) {
+            return false;
+        }
+        if ($filters['dateTo'] instanceof DateTimeImmutable && $updatedAt instanceof DateTimeImmutable && $updatedAt > $filters['dateTo']) {
+            return false;
+        }
+
+        $search = $filters['search'];
+        if ($search === '') {
+            return true;
+        }
+
+        $needle = mb_strtolower($search);
+        $haystackParts = [
+            mb_strtolower((string) ($entry['title'] ?? '')),
+            mb_strtolower((string) ($entry['slug'] ?? '')),
+            mb_strtolower((string) ($entry['excerpt'] ?? '')),
+            mb_strtolower((string) ($entry['fields']['author'] ?? '')),
+            mb_strtolower((string) ($collection['name'] ?? '')),
+            mb_strtolower($handle),
+        ];
+
+        $statusLabel = self::STATUS_LABELS[$status] ?? $status;
+        $haystackParts[] = mb_strtolower($statusLabel);
+
+        foreach ($entry['taxonomies'] ?? [] as $taxonomyTerms) {
+            foreach ($taxonomyTerms as $slug) {
+                $haystackParts[] = mb_strtolower((string) $slug);
+            }
+        }
+
+        $haystack = implode(' ', array_filter($haystackParts));
+
+        return mb_stripos($haystack, $needle) !== false;
+    }
+
     /**
      * @param array<string, array<string, string>> $taxonomyIndex
      *
@@ -838,6 +1218,35 @@ final class InMemoryCollectionEntriesRepository
         }
 
         return $entries;
+    }
+
+    /**
+     * @param array<int, array{entry: array<string, mixed>, collection: array<string, mixed>}> $rows
+     * @param array<string, mixed> $filters
+     *
+     * @return array<int, array{entry: array<string, mixed>, collection: array<string, mixed>}>
+     */
+    private function sortAggregatedEntries(array $rows, array $filters): array
+    {
+        $column = $filters['orderColumn'];
+        $direction = $filters['orderDirection'] === 'asc' ? 1 : -1;
+        $key = self::GLOBAL_COLUMN_MAP[$column] ?? 'updated_at';
+
+        usort(
+            $rows,
+            function (array $a, array $b) use ($key): int {
+                $valueA = $this->getAggregatedSortValue($a['entry'], $a['collection'], $key);
+                $valueB = $this->getAggregatedSortValue($b['entry'], $b['collection'], $key);
+
+                return $valueA <=> $valueB;
+            }
+        );
+
+        if ($direction === -1) {
+            $rows = array_reverse($rows);
+        }
+
+        return $rows;
     }
 
     /**
@@ -1050,6 +1459,30 @@ final class InMemoryCollectionEntriesRepository
                 }
                 sort($terms);
                 return implode(' ', $terms);
+            case 'author':
+                return mb_strtolower((string) ($entry['fields']['author'] ?? ''));
+            case 'updated_at':
+                $date = $this->toDateTime((string) ($entry['updated_at'] ?? ''));
+                return $date instanceof DateTimeImmutable ? $date->getTimestamp() : 0;
+            case 'published_at':
+                $date = $this->toDateTime((string) ($entry['published_at'] ?? ''));
+                return $date instanceof DateTimeImmutable ? $date->getTimestamp() : 0;
+            default:
+                return (string) ($entry[$key] ?? '');
+        }
+    }
+
+    private function getAggregatedSortValue(array $entry, array $collection, string $key): int|float|string
+    {
+        switch ($key) {
+            case 'title':
+                return mb_strtolower((string) ($entry['title'] ?? ''));
+            case 'collection':
+                return mb_strtolower((string) ($collection['name'] ?? $collection['handle'] ?? ''));
+            case 'status':
+                return self::STATUS_SORT_ORDER[(string) ($entry['status'] ?? '')] ?? 999;
+            case 'locale':
+                return mb_strtolower((string) ($entry['locale'] ?? ''));
             case 'author':
                 return mb_strtolower((string) ($entry['fields']['author'] ?? ''));
             case 'updated_at':

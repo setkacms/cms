@@ -86,6 +86,8 @@ class Module extends BaseModule
                 'dashboard/collections/<handle:[A-Za-z0-9\-_]+>/entries/<id:[^/]+>/edit' => 'dashboard/entries/edit',
                 'dashboard/elements/<id:[^/]+>/preview' => 'dashboard/elements/preview',
                 'dashboard/elements/<id:[^/]+>/history' => 'dashboard/elements/history',
+                'dashboard/schemas/create' => 'dashboard/schemas/create',
+                'dashboard/schemas/editor' => 'dashboard/schemas/editor',
             ], false);
         }
 

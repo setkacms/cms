@@ -16,6 +16,20 @@
         schemasCurrentSelectionId: null,
         schemasSelectFirstAfterRender: false,
         schemasStorageKey: 'dashboard.schemas.savedViews',
+        schemasEditorBaseUrl: '',
+        schemasIndexUrl: '',
+        schemasCreateUrl: '',
+        schemasPendingUpdateStorageKey: 'dashboard.schemas.pendingUpdate',
+        schemasDatasetStorageKey: 'dashboard.schemas.customDataset',
+        customSchemasDataset: [],
+        schemaCollections: [],
+        schemaFieldTypes: [],
+        schemaPresets: [],
+        schemaBuilderConfig: null,
+        schemaBuilderMode: 'create',
+        schemaBuilderInitialId: '',
+        schemaHandleManuallyEdited: false,
+        schemasStorageListenerBound: false,
         isApplyingSchemasView: false,
         collectionEntriesTable: null,
         collectionEntriesSelection: {},
@@ -82,6 +96,7 @@
             this.bindCollectionsBulkActions();
             this.initCollectionsSavedViews();
             this.initSchemasModule();
+            this.initSchemaBuilder();
             this.bindCollectionsActionBar();
             this.initCollectionsExport();
             this.initCollectionEntriesModule();
@@ -1101,6 +1116,9 @@
                 return;
             }
 
+            this.setupSchemasModuleConfig($container);
+            this.bindSchemasActions($container);
+
             this.schemasDataset = this.readSchemasDatasetFromDom();
             this.schemasDefaultSavedViews = this.readSchemasDefaultSavedViewsFromDom();
             this.schemasSavedViews = this.loadSchemasSavedViews();
@@ -1108,6 +1126,10 @@
             this.schemasCurrentSelectionId = null;
             this.schemasSelectFirstAfterRender = false;
             this.isApplyingSchemasView = false;
+
+            this.mergeCustomSchemasDataset();
+            this.applySchemasPendingUpdate();
+            this.bindSchemasStorageListener();
 
             this.renderSchemasCollectionFilterOptions();
             this.bindSchemasTableEvents();
@@ -1129,21 +1151,448 @@
                     return [];
                 }
 
+                var self = this;
+
                 return parsed
-                    .filter(function (item) {
-                        return item && typeof item.id === 'string' && typeof item.name === 'string';
-                    })
                     .map(function (item) {
-                        var copy = $.extend(true, {}, item);
-                        if (!Array.isArray(copy.fields)) {
-                            copy.fields = [];
-                        }
-                        return copy;
+                        return self.normalizeSchemaDefinition(item);
+                    })
+                    .filter(function (item) {
+                        return item !== null;
                     });
             } catch (error) {
                 console.warn('Не удалось разобрать набор схем', error);
                 return [];
             }
+        },
+
+        setupSchemasModuleConfig: function ($container) {
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            var editorUrl = $container.data('editor-url') || window.cmsSchemasEditorUrl || this.schemasEditorBaseUrl;
+            if (editorUrl) {
+                this.schemasEditorBaseUrl = String(editorUrl);
+            }
+
+            var indexUrl = $container.data('index-url') || window.cmsSchemasIndexUrl || this.schemasIndexUrl;
+            if (indexUrl) {
+                this.schemasIndexUrl = String(indexUrl);
+            }
+
+            var createUrl = $container.data('create-url') || window.cmsSchemasCreateUrl || this.schemasCreateUrl;
+            if (createUrl) {
+                this.schemasCreateUrl = String(createUrl);
+            }
+
+            if (window.cmsSchemasPendingStorageKey) {
+                this.schemasPendingUpdateStorageKey = String(window.cmsSchemasPendingStorageKey);
+            }
+
+            if (window.cmsSchemasDatasetStorageKey) {
+                this.schemasDatasetStorageKey = String(window.cmsSchemasDatasetStorageKey);
+            }
+        },
+
+        mergeCustomSchemasDataset: function () {
+            var custom = this.loadCustomSchemasDataset();
+            if (!custom.length) {
+                return false;
+            }
+
+            var index = {};
+            for (var i = 0; i < this.schemasDataset.length; i++) {
+                var item = this.schemasDataset[i];
+                if (item && item.id) {
+                    index[item.id] = i;
+                }
+            }
+
+            var changed = false;
+            for (var j = 0; j < custom.length; j++) {
+                var schema = custom[j];
+                if (!schema || !schema.id) {
+                    continue;
+                }
+
+                if (Object.prototype.hasOwnProperty.call(index, schema.id)) {
+                    this.schemasDataset[index[schema.id]] = schema;
+                } else {
+                    this.schemasDataset.push(schema);
+                }
+
+                changed = true;
+            }
+
+            return changed;
+        },
+
+        loadCustomSchemasDataset: function () {
+            if (!window.localStorage || !this.schemasDatasetStorageKey) {
+                this.customSchemasDataset = [];
+                return [];
+            }
+
+            try {
+                var raw = window.localStorage.getItem(this.schemasDatasetStorageKey);
+                if (!raw) {
+                    this.customSchemasDataset = [];
+                    return [];
+                }
+
+                var parsed = JSON.parse(raw);
+                if (!Array.isArray(parsed)) {
+                    this.customSchemasDataset = [];
+                    return [];
+                }
+
+                var self = this;
+                var result = parsed
+                    .map(function (item) {
+                        return self.normalizeSchemaDefinition(item);
+                    })
+                    .filter(function (item) {
+                        return item !== null;
+                    });
+
+                this.customSchemasDataset = result;
+
+                return result;
+            } catch (error) {
+                console.warn('Не удалось прочитать пользовательские схемы', error);
+                this.customSchemasDataset = [];
+                return [];
+            }
+        },
+
+        persistCustomSchema: function (schema, skipNormalization) {
+            if (!schema || !schema.id) {
+                return;
+            }
+
+            var normalized = skipNormalization ? $.extend(true, {}, schema) : this.normalizeSchemaDefinition(schema);
+            if (!normalized) {
+                return;
+            }
+
+            if (!Array.isArray(this.customSchemasDataset)) {
+                this.customSchemasDataset = [];
+            }
+
+            var replaced = false;
+            for (var i = 0; i < this.customSchemasDataset.length; i++) {
+                if (this.customSchemasDataset[i] && this.customSchemasDataset[i].id === normalized.id) {
+                    this.customSchemasDataset[i] = normalized;
+                    replaced = true;
+                    break;
+                }
+            }
+
+            if (!replaced) {
+                this.customSchemasDataset.push(normalized);
+            }
+
+            if (!window.localStorage || !this.schemasDatasetStorageKey) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(this.schemasDatasetStorageKey, JSON.stringify(this.customSchemasDataset));
+            } catch (error) {
+                console.warn('Не удалось сохранить пользовательские схемы', error);
+            }
+        },
+
+        applySchemasPendingUpdate: function () {
+            if (!window.localStorage || !this.schemasPendingUpdateStorageKey) {
+                return false;
+            }
+
+            var raw;
+            try {
+                raw = window.localStorage.getItem(this.schemasPendingUpdateStorageKey);
+            } catch (error) {
+                return false;
+            }
+
+            if (!raw) {
+                return false;
+            }
+
+            var payload;
+            try {
+                payload = JSON.parse(raw);
+            } catch (error) {
+                window.localStorage.removeItem(this.schemasPendingUpdateStorageKey);
+                return false;
+            }
+
+            window.localStorage.removeItem(this.schemasPendingUpdateStorageKey);
+
+            if (!payload || !payload.schema) {
+                return false;
+            }
+
+            var normalized = this.normalizeSchemaDefinition(payload.schema);
+            if (!normalized) {
+                return false;
+            }
+
+            var replaced = false;
+            for (var i = 0; i < this.schemasDataset.length; i++) {
+                if (this.schemasDataset[i] && this.schemasDataset[i].id === normalized.id) {
+                    this.schemasDataset[i] = normalized;
+                    replaced = true;
+                    break;
+                }
+            }
+
+            if (!replaced) {
+                this.schemasDataset.push(normalized);
+            }
+
+            this.schemasCurrentSelectionId = normalized.id;
+            this.schemasSelectFirstAfterRender = false;
+
+            this.persistCustomSchema(normalized, true);
+
+            return true;
+        },
+
+        bindSchemasStorageListener: function () {
+            if (this.schemasStorageListenerBound) {
+                return;
+            }
+
+            if (!window.addEventListener || !this.schemasPendingUpdateStorageKey) {
+                return;
+            }
+
+            this.schemasStorageListenerBound = true;
+
+            var self = this;
+            window.addEventListener('storage', function (event) {
+                if (!event) {
+                    return;
+                }
+
+                var key = event.key || '';
+                if (key !== self.schemasPendingUpdateStorageKey) {
+                    return;
+                }
+
+                if (!event.newValue) {
+                    return;
+                }
+
+                var applied = self.applySchemasPendingUpdate();
+                if (!applied) {
+                    return;
+                }
+
+                self.renderSchemasCollectionFilterOptions();
+                self.renderSchemasTable();
+                self.updateSchemaPreview();
+            });
+        },
+
+        buildSchemaEditorUrl: function (schemaId) {
+            var id = String(schemaId || '');
+            if (!id) {
+                return '';
+            }
+
+            var base = this.schemasEditorBaseUrl || window.cmsSchemasEditorUrl || '';
+            if (!base) {
+                return '';
+            }
+
+            var separator = base.indexOf('?') === -1 ? '?' : '&';
+            return base + separator + 'schema=' + encodeURIComponent(id);
+        },
+
+        normalizeSchemaDefinition: function (schema) {
+            if (!schema || typeof schema !== 'object') {
+                return null;
+            }
+
+            var copy = $.extend(true, {}, schema);
+            var id = copy.id || copy.handle || '';
+            if (typeof id !== 'string') {
+                id = String(id);
+            }
+            id = id.trim();
+            if (!id) {
+                return null;
+            }
+            copy.id = id;
+
+            if (copy.name === null || typeof copy.name === 'undefined') {
+                copy.name = '';
+            }
+            copy.name = String(copy.name || '').trim();
+            if (!copy.name) {
+                copy.name = 'Схема';
+            }
+
+            if (!copy.handle || typeof copy.handle !== 'string') {
+                var fallback = copy.id;
+                if (fallback.indexOf('schema-') === 0) {
+                    fallback = fallback.substring(7);
+                }
+                copy.handle = fallback;
+            }
+            copy.handle = String(copy.handle || '').trim();
+            if (!copy.handle) {
+                copy.handle = this.slugify(copy.name);
+            }
+
+            var updatedIso = copy.updatedIso ? String(copy.updatedIso) : '';
+            var updatedDate = null;
+            if (updatedIso) {
+                var parsedDate = new Date(updatedIso);
+                if (!isNaN(parsedDate.getTime())) {
+                    updatedDate = parsedDate;
+                }
+            }
+            if (!updatedDate) {
+                updatedDate = new Date();
+            }
+            copy.updatedIso = updatedDate.toISOString();
+            if (copy.updated && typeof copy.updated === 'string' && copy.updated.trim() !== '') {
+                copy.updated = copy.updated.trim();
+            } else {
+                copy.updated = this.formatDateTimeLabel(updatedDate);
+            }
+
+            if (copy.collection && typeof copy.collection === 'object') {
+                copy.collection = {
+                    handle: copy.collection.handle ? String(copy.collection.handle) : '',
+                    name: copy.collection.name ? String(copy.collection.name) : (copy.collection.handle ? String(copy.collection.handle) : '—'),
+                    type: copy.collection.type ? String(copy.collection.type) : ''
+                };
+            } else {
+                copy.collection = null;
+            }
+
+            if (!Array.isArray(copy.tags)) {
+                copy.tags = [];
+            } else {
+                copy.tags = copy.tags
+                    .map(function (tag) {
+                        return String(tag || '').trim();
+                    })
+                    .filter(function (tag) {
+                        return tag !== '';
+                    });
+            }
+
+            if (!Array.isArray(copy.fields)) {
+                copy.fields = [];
+            }
+
+            var self = this;
+            copy.fields = copy.fields.map(function (field) {
+                var normalizedField = field ? $.extend({}, field) : {};
+                normalizedField.name = normalizedField.name ? String(normalizedField.name) : 'Поле';
+                if (typeof normalizedField.handle === 'string' && normalizedField.handle.trim() !== '') {
+                    normalizedField.handle = normalizedField.handle.trim();
+                } else {
+                    normalizedField.handle = self.slugify(normalizedField.name);
+                }
+                normalizedField.type = normalizedField.type ? String(normalizedField.type) : '';
+                normalizedField.required = Boolean(normalizedField.required);
+                normalizedField.localized = Boolean(normalizedField.localized);
+                normalizedField.multiple = Boolean(normalizedField.multiple);
+                if (typeof normalizedField.description === 'string') {
+                    normalizedField.description = normalizedField.description;
+                } else if (typeof normalizedField.description === 'number') {
+                    normalizedField.description = String(normalizedField.description);
+                } else {
+                    delete normalizedField.description;
+                }
+
+                return normalizedField;
+            });
+
+            if (!copy.editUrl || typeof copy.editUrl !== 'string' || copy.editUrl === '') {
+                var editorUrl = this.buildSchemaEditorUrl(copy.id);
+                if (editorUrl) {
+                    copy.editUrl = editorUrl;
+                }
+            }
+
+            return copy;
+        },
+
+        formatDateTimeLabel: function (date) {
+            if (!(date instanceof Date) || isNaN(date.getTime())) {
+                return '';
+            }
+
+            if (typeof date.toLocaleString === 'function') {
+                try {
+                    return date.toLocaleString('ru-RU', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                    });
+                } catch (error) {
+                    // ignore locale errors
+                }
+            }
+
+            var pad = function (value) {
+                return value < 10 ? '0' + value : String(value);
+            };
+
+            return pad(date.getDate()) + '.' + pad(date.getMonth() + 1) + '.' + date.getFullYear() + ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes());
+        },
+
+        slugify: function (value) {
+            if (value === null || typeof value === 'undefined') {
+                return '';
+            }
+
+            var source = String(value).trim();
+            if (!source) {
+                return '';
+            }
+
+            var map = {
+                'а': 'a', 'б': 'b', 'в': 'v', 'г': 'g', 'д': 'd', 'е': 'e', 'ё': 'e', 'ж': 'zh', 'з': 'z', 'и': 'i',
+                'й': 'y', 'к': 'k', 'л': 'l', 'м': 'm', 'н': 'n', 'о': 'o', 'п': 'p', 'р': 'r', 'с': 's', 'т': 't',
+                'у': 'u', 'ф': 'f', 'х': 'h', 'ц': 'c', 'ч': 'ch', 'ш': 'sh', 'щ': 'shch', 'ъ': '', 'ы': 'y',
+                'ь': '', 'э': 'e', 'ю': 'yu', 'я': 'ya'
+            };
+
+            var lower = source.toLowerCase();
+            var buffer = [];
+            for (var i = 0; i < lower.length; i++) {
+                var char = lower.charAt(i);
+                if (Object.prototype.hasOwnProperty.call(map, char)) {
+                    buffer.push(map[char]);
+                    continue;
+                }
+
+                if (/[a-z0-9]/.test(char)) {
+                    buffer.push(char);
+                    continue;
+                }
+
+                if (char === ' ' || char === '-' || char === '_' || char === '.') {
+                    buffer.push('-');
+                }
+            }
+
+            var slug = buffer.join('');
+            slug = slug.replace(/[^a-z0-9\-]+/g, '');
+            slug = slug.replace(/-+/g, '-').replace(/^-|-$/g, '');
+
+            return slug;
         },
 
         readSchemasDefaultSavedViewsFromDom: function () {
@@ -1186,6 +1635,60 @@
                 }
 
                 self.selectSchemaById(id);
+            });
+        },
+
+        bindSchemasActions: function ($container) {
+            if (!$container || !$container.length) {
+                $container = $('[data-role="schemas"]');
+            }
+
+            if (!$container || !$container.length) {
+                return;
+            }
+
+            var self = this;
+
+            $container.off('click.schemasActions', '[data-action="create-schema"]');
+            $container.on('click.schemasActions', '[data-action="create-schema"]', function (event) {
+                event.preventDefault();
+
+                var $trigger = $(this);
+                var url = $trigger.attr('data-create-url')
+                    || $container.attr('data-create-url')
+                    || self.schemasCreateUrl
+                    || window.cmsSchemasCreateUrl
+                    || '';
+
+                if (!url) {
+                    return;
+                }
+
+                window.location.href = url;
+            });
+
+            $container.off('click.schemasActions', '[data-role="edit-schema"]');
+            $container.on('click.schemasActions', '[data-role="edit-schema"]', function (event) {
+                var $button = $(this);
+                var schemaId = $button.attr('data-schema-id') || self.schemasCurrentSelectionId || '';
+                var hrefAttr = $button.attr('href') || '';
+                var target = '';
+
+                if (hrefAttr && hrefAttr !== '#') {
+                    target = hrefAttr;
+                } else if (schemaId) {
+                    target = self.buildSchemaEditorUrl(schemaId);
+                }
+
+                if (!target) {
+                    event.preventDefault();
+                    return;
+                }
+
+                if ($button.hasClass('disabled') || hrefAttr === '#' || hrefAttr === '') {
+                    event.preventDefault();
+                    window.location.href = target;
+                }
             });
         },
 
@@ -1432,7 +1935,11 @@
                     $fields.empty().append('<li class="list-group-item text-muted">Поля будут показаны здесь.</li>');
                 }
                 if ($editButton.length) {
-                    $editButton.addClass('disabled').attr('href', '#').attr('aria-disabled', 'true');
+                    $editButton
+                        .addClass('disabled')
+                        .attr('href', '#')
+                        .attr('aria-disabled', 'true')
+                        .attr('data-schema-id', '');
                 }
                 return;
             }
@@ -1475,10 +1982,17 @@
             this.renderSchemaFields(schema, $fields);
 
             if ($editButton.length) {
-                if (schema.editUrl) {
-                    $editButton.removeClass('disabled').attr('href', schema.editUrl).removeAttr('aria-disabled');
+                var editUrl = schema.editUrl || this.buildSchemaEditorUrl(schema.id);
+                if (editUrl) {
+                    $editButton
+                        .removeClass('disabled')
+                        .attr('href', editUrl)
+                        .removeAttr('aria-disabled');
                 } else {
-                    $editButton.addClass('disabled').attr('href', '#').attr('aria-disabled', 'true');
+                    $editButton
+                        .addClass('disabled')
+                        .attr('href', '#')
+                        .attr('aria-disabled', 'true');
                 }
                 $editButton.attr('data-schema-id', schema.id || '');
             }
@@ -1854,6 +2368,883 @@
             }).fail(function (error) {
                 console.warn('Не удалось синхронизировать Saved Views схем', error);
             });
+        },
+
+        initSchemaBuilder: function () {
+            var $wrapper = $('[data-role="schema-builder-wrapper"]');
+            if (!$wrapper.length) {
+                return;
+            }
+
+            var config = this.readSchemaBuilderConfig();
+            this.schemaBuilderConfig = config;
+            this.schemaBuilderMode = String(config.mode || 'create');
+
+            if (config.editorUrl) {
+                this.schemasEditorBaseUrl = String(config.editorUrl);
+            }
+            if (config.indexUrl) {
+                this.schemasIndexUrl = String(config.indexUrl);
+            }
+            if (config.createUrl) {
+                this.schemasCreateUrl = String(config.createUrl);
+            }
+            if (config.pendingStorageKey) {
+                this.schemasPendingUpdateStorageKey = String(config.pendingStorageKey);
+            }
+            if (config.datasetStorageKey) {
+                this.schemasDatasetStorageKey = String(config.datasetStorageKey);
+            }
+
+            this.schemaCollections = this.normalizeSchemaCollections(config.collections || []);
+            this.schemaFieldTypes = this.normalizeSchemaFieldTypes(config.fieldTypes || []);
+            this.schemaPresets = Array.isArray(config.presets) ? config.presets : [];
+
+            this.customSchemasDataset = this.loadCustomSchemasDataset();
+
+            var initialSchema = null;
+            if (config.schema) {
+                initialSchema = this.normalizeSchemaDefinition(config.schema);
+            }
+
+            var requestedId = config.requestedSchemaId ? String(config.requestedSchemaId) : '';
+            if (!initialSchema && requestedId) {
+                initialSchema = this.findCustomSchemaById(requestedId);
+            }
+
+            if (!initialSchema && config.schema && config.schema.handle) {
+                initialSchema = this.findCustomSchemaById(config.schema.handle);
+            }
+
+            this.populateSchemaBuilderCollectionsSelect($wrapper, this.schemaCollections);
+
+            if (initialSchema && initialSchema.id) {
+                this.schemaBuilderInitialId = initialSchema.id;
+            } else if (this.schemaBuilderMode === 'edit' && requestedId) {
+                this.schemaBuilderInitialId = requestedId.indexOf('schema-') === 0 ? requestedId : 'schema-' + requestedId;
+            } else {
+                this.schemaBuilderInitialId = '';
+            }
+
+            this.populateSchemaForm(initialSchema, { preserveId: this.schemaBuilderMode === 'edit' });
+            this.updateSchemaHandleAutoFill($wrapper);
+            this.bindSchemaBuilderEvents($wrapper);
+            this.updateSchemaBuilderPreview();
+            this.resetSchemaBuilderFeedback();
+        },
+
+        readSchemaBuilderConfig: function () {
+            var $script = $('[data-role="schema-builder-config"]');
+            if (!$script.length) {
+                return {};
+            }
+
+            try {
+                var raw = $script.text() || '{}';
+                var parsed = JSON.parse(raw);
+                if (!parsed || typeof parsed !== 'object') {
+                    return {};
+                }
+
+                return parsed;
+            } catch (error) {
+                console.warn('Не удалось разобрать конфигурацию конструктора схем', error);
+                return {};
+            }
+        },
+
+        normalizeSchemaCollections: function (collections) {
+            if (!Array.isArray(collections)) {
+                return [];
+            }
+
+            var result = [];
+            var seen = {};
+
+            for (var i = 0; i < collections.length; i++) {
+                var item = collections[i];
+                if (!item || typeof item !== 'object') {
+                    continue;
+                }
+
+                var handle = item.handle ? String(item.handle) : '';
+                handle = handle.trim();
+                if (!handle || seen[handle]) {
+                    continue;
+                }
+
+                seen[handle] = true;
+                result.push({
+                    handle: handle,
+                    name: item.name ? String(item.name) : handle,
+                    type: item.type ? String(item.type) : ''
+                });
+            }
+
+            return result;
+        },
+
+        normalizeSchemaFieldTypes: function (fieldTypes) {
+            if (!Array.isArray(fieldTypes)) {
+                return this.getDefaultSchemaFieldTypes();
+            }
+
+            var result = [];
+            var seen = {};
+
+            for (var i = 0; i < fieldTypes.length; i++) {
+                var item = fieldTypes[i];
+                if (!item || typeof item !== 'object') {
+                    continue;
+                }
+
+                var value = item.value ? String(item.value) : '';
+                value = value.trim();
+                if (!value || seen[value]) {
+                    continue;
+                }
+
+                seen[value] = true;
+                result.push({
+                    value: value,
+                    label: item.label ? String(item.label) : value
+                });
+            }
+
+            if (!result.length) {
+                return this.getDefaultSchemaFieldTypes();
+            }
+
+            return result;
+        },
+
+        getDefaultSchemaFieldTypes: function () {
+            return [
+                { value: 'text', label: 'Текст' },
+                { value: 'textarea', label: 'Многострочный текст' },
+                { value: 'richtext', label: 'Rich Text' },
+                { value: 'number', label: 'Число' },
+                { value: 'datetime', label: 'Дата и время' },
+                { value: 'relation', label: 'Связь' },
+                { value: 'assets', label: 'Медиа' },
+                { value: 'matrix', label: 'Набор блоков' }
+            ];
+        },
+
+        populateSchemaBuilderCollectionsSelect: function ($wrapper, collections) {
+            var $select = $wrapper.find('[data-role="schema-collection"]');
+            if (!$select.length) {
+                return;
+            }
+
+            var options = ['<option value="">Выберите коллекцию</option>'];
+            for (var i = 0; i < collections.length; i++) {
+                var collection = collections[i];
+                options.push('<option value="' + this.escapeHtml(collection.handle) + '">' + this.escapeHtml(collection.name) + '</option>');
+            }
+
+            $select.html(options.join(''));
+
+            if ($select.data('select2')) {
+                $select.trigger('change.select2');
+            }
+        },
+
+        populateSchemaForm: function (schema, options) {
+            options = options || {};
+            var $builder = $('[data-role="schema-builder"]');
+            if (!$builder.length) {
+                return;
+            }
+
+            var $name = $builder.find('[data-role="schema-name"]');
+            var $handle = $builder.find('[data-role="schema-handle"]');
+            var $description = $builder.find('[data-role="schema-description"]');
+            var $tags = $builder.find('[data-role="schema-tags"]');
+            var $collection = $builder.find('[data-role="schema-collection"]');
+
+            var name = schema && schema.name ? String(schema.name) : '';
+            $name.val(name);
+
+            var handle = '';
+            if (schema) {
+                if (schema.handle) {
+                    handle = String(schema.handle);
+                } else if (schema.id && schema.id.indexOf('schema-') === 0) {
+                    handle = schema.id.substring(7);
+                }
+            }
+
+            $handle.val(handle);
+            this.schemaHandleManuallyEdited = Boolean(handle);
+
+            var description = schema && schema.description ? String(schema.description) : '';
+            $description.val(description);
+
+            var tags = schema && Array.isArray(schema.tags) ? schema.tags.join(', ') : '';
+            $tags.val(tags);
+
+            var collectionHandle = schema && schema.collection && schema.collection.handle ? String(schema.collection.handle) : '';
+            $collection.val(collectionHandle);
+            if ($collection.data('select2')) {
+                $collection.trigger('change.select2');
+            } else {
+                $collection.trigger('change');
+            }
+
+            var $list = $builder.find('[data-role="schema-fields-list"]');
+            $list.empty();
+
+            if (schema && Array.isArray(schema.fields) && schema.fields.length) {
+                for (var i = 0; i < schema.fields.length; i++) {
+                    this.addSchemaField(schema.fields[i]);
+                }
+            }
+
+            this.updateSchemaFieldsEmptyState();
+
+            if (schema && schema.id && options.preserveId) {
+                this.schemaBuilderInitialId = schema.id;
+            } else if (!options.preserveId && this.schemaBuilderMode !== 'edit') {
+                this.schemaBuilderInitialId = '';
+            }
+        },
+
+        clearSchemaFields: function ($list) {
+            var $container = $list && $list.length ? $list : $('[data-role="schema-fields-list"]');
+            if (!$container.length) {
+                return;
+            }
+
+            $container.empty();
+            this.updateSchemaFieldsEmptyState();
+        },
+
+        addSchemaField: function (field) {
+            var $list = $('[data-role="schema-fields-list"]');
+            if (!$list.length) {
+                return null;
+            }
+
+            var $row = this.createSchemaFieldRow(field || {});
+            $list.append($row);
+            this.updateSchemaFieldHeading($row);
+            this.updateSchemaFieldsEmptyState();
+            this.updateSchemaBuilderPreview();
+
+            return $row;
+        },
+
+        createSchemaFieldRow: function (field) {
+            var options = ['<option value="">Выберите тип</option>'];
+            for (var i = 0; i < this.schemaFieldTypes.length; i++) {
+                var type = this.schemaFieldTypes[i];
+                options.push('<option value="' + this.escapeHtml(type.value) + '">' + this.escapeHtml(type.label) + '</option>');
+            }
+
+            var description = field && field.description ? String(field.description) : '';
+            var rowHtml = '' +
+                '<div class="panel panel-default schema-builder-field" data-role="schema-field">' +
+                '<div class="panel-heading clearfix">' +
+                '<strong data-role="schema-field-heading">' + this.escapeHtml(field && field.name ? String(field.name) : 'Новое поле') + '</strong>' +
+                '<div class="btn-group btn-group-xs pull-right">' +
+                '<button type="button" class="btn btn-default" data-action="schema-field-remove" title="Удалить поле">' +
+                '<i class="fa fa-trash"></i>' +
+                '</button>' +
+                '</div>' +
+                '</div>' +
+                '<div class="panel-body">' +
+                '<div class="row">' +
+                '<div class="col-sm-6">' +
+                '<div class="form-group">' +
+                '<label>Название поля</label>' +
+                '<input type="text" class="form-control" data-role="schema-field-name" value="' + this.escapeHtml(field && field.name ? String(field.name) : '') + '">' +
+                '</div>' +
+                '</div>' +
+                '<div class="col-sm-6">' +
+                '<div class="form-group">' +
+                '<label>Код</label>' +
+                '<div class="input-group">' +
+                '<span class="input-group-addon">@</span>' +
+                '<input type="text" class="form-control" data-role="schema-field-handle" value="' + this.escapeHtml(field && field.handle ? String(field.handle) : '') + '">' +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '<div class="row">' +
+                '<div class="col-sm-4">' +
+                '<div class="form-group">' +
+                '<label>Тип</label>' +
+                '<select class="form-control" data-role="schema-field-type">' + options.join('') + '</select>' +
+                '</div>' +
+                '</div>' +
+                '<div class="col-sm-8">' +
+                '<div class="form-group schema-field-flags">' +
+                '<label class="checkbox-inline"><input type="checkbox" data-role="schema-field-required"' + (field && field.required ? ' checked' : '') + '> Обязательное</label>' +
+                '<label class="checkbox-inline"><input type="checkbox" data-role="schema-field-localized"' + (field && field.localized ? ' checked' : '') + '> Локализация</label>' +
+                '<label class="checkbox-inline"><input type="checkbox" data-role="schema-field-multiple"' + (field && field.multiple ? ' checked' : '') + '> Множественное</label>' +
+                '</div>' +
+                '</div>' +
+                '</div>' +
+                '<div class="form-group">' +
+                '<label>Описание</label>' +
+                '<textarea class="form-control" rows="2" data-role="schema-field-description">' + this.escapeHtml(description) + '</textarea>' +
+                '</div>' +
+                '</div>' +
+                '</div>';
+
+            var $row = $(rowHtml);
+            var $type = $row.find('[data-role="schema-field-type"]');
+            $type.val(field && field.type ? String(field.type) : '');
+
+            this.bindSchemaFieldRowEvents($row);
+
+            return $row;
+        },
+
+        bindSchemaFieldRowEvents: function ($row) {
+            if (!$row || !$row.length) {
+                return;
+            }
+
+            var self = this;
+            var $name = $row.find('[data-role="schema-field-name"]');
+            var $handle = $row.find('[data-role="schema-field-handle"]');
+            var handleEdited = $handle.val().length > 0;
+
+            $name.on('input.schemaField', function () {
+                if ((!handleEdited || !$handle.val()) && $(this).val()) {
+                    $handle.val(self.slugify($(this).val()));
+                }
+
+                self.updateSchemaFieldHeading($row);
+                self.updateSchemaBuilderPreview();
+            });
+
+            $handle.on('input.schemaField', function () {
+                handleEdited = $(this).val().length > 0;
+                self.updateSchemaFieldHeading($row);
+                self.updateSchemaBuilderPreview();
+            });
+
+            $row.on('change.schemaField', '[data-role="schema-field-type"], [data-role="schema-field-required"], [data-role="schema-field-localized"], [data-role="schema-field-multiple"]', function () {
+                self.updateSchemaBuilderPreview();
+            });
+
+            $row.on('input.schemaField', '[data-role="schema-field-description"]', function () {
+                self.updateSchemaBuilderPreview();
+            });
+
+            $row.on('click.schemaField', '[data-action="schema-field-remove"]', function (event) {
+                event.preventDefault();
+                self.removeSchemaField($row);
+            });
+        },
+
+        updateSchemaFieldHeading: function ($row) {
+            if (!$row || !$row.length) {
+                return;
+            }
+
+            var name = String($row.find('[data-role="schema-field-name"]').val() || '').trim();
+            var handle = String($row.find('[data-role="schema-field-handle"]').val() || '').trim();
+            var label = name || (handle ? '@' + handle : 'Новое поле');
+
+            $row.find('[data-role="schema-field-heading"]').text(label);
+        },
+
+        updateSchemaFieldsEmptyState: function () {
+            var $list = $('[data-role="schema-fields-list"]');
+            var $placeholder = $('[data-role="schema-fields-empty"]');
+
+            if (!$list.length || !$placeholder.length) {
+                return;
+            }
+
+            if ($list.find('[data-role="schema-field"]').length) {
+                $placeholder.addClass('hidden');
+            } else {
+                $placeholder.removeClass('hidden');
+            }
+        },
+
+        removeSchemaField: function ($row) {
+            if (!$row || !$row.length) {
+                return;
+            }
+
+            $row.remove();
+            this.updateSchemaFieldsEmptyState();
+            this.updateSchemaBuilderPreview();
+        },
+
+        updateSchemaHandleAutoFill: function ($wrapper) {
+            var $builder = $wrapper.find('[data-role="schema-builder"]');
+            if (!$builder.length) {
+                return;
+            }
+
+            var self = this;
+            var $name = $builder.find('[data-role="schema-name"]');
+            var $handle = $builder.find('[data-role="schema-handle"]');
+            if (!$name.length || !$handle.length) {
+                return;
+            }
+
+            this.schemaHandleManuallyEdited = $handle.val().length > 0;
+
+            $handle.off('input.schemaHandle').on('input.schemaHandle', function () {
+                self.schemaHandleManuallyEdited = $(this).val().length > 0;
+                self.updateSchemaBuilderPreview();
+            });
+
+            $name.off('input.schemaHandle').on('input.schemaHandle', function () {
+                if (!self.schemaHandleManuallyEdited || !$handle.val()) {
+                    $handle.val(self.slugify($(this).val()));
+                }
+
+                self.updateSchemaBuilderPreview();
+            });
+        },
+
+        bindSchemaBuilderEvents: function ($wrapper) {
+            var $builder = $wrapper.find('[data-role="schema-builder"]');
+            if (!$builder.length) {
+                return;
+            }
+
+            var self = this;
+
+            $builder.on('click', '[data-action="schema-add-field"]', function (event) {
+                event.preventDefault();
+                self.addSchemaField({});
+            });
+
+            $builder.on('click', '[data-action="schema-save"]', function (event) {
+                event.preventDefault();
+                self.saveSchemaFromBuilder({ redirect: true, button: this });
+            });
+
+            $builder.on('click', '[data-action="schema-save-stay"]', function (event) {
+                event.preventDefault();
+                self.saveSchemaFromBuilder({ redirect: false, button: this });
+            });
+
+            $builder.on('input', '[data-role="schema-name"], [data-role="schema-handle"], [data-role="schema-description"], [data-role="schema-tags"]', function () {
+                self.updateSchemaBuilderPreview();
+            });
+
+            $builder.on('change', '[data-role="schema-collection"]', function () {
+                self.updateSchemaBuilderPreview();
+            });
+
+            $wrapper.on('click', '[data-action="schema-apply-preset"]', function (event) {
+                event.preventDefault();
+                var presetId = String($(this).attr('data-preset-id') || '');
+                var preset = self.findSchemaPreset(presetId);
+                self.applySchemaPreset(preset);
+            });
+        },
+
+        getSchemaFormValues: function () {
+            var $builder = $('[data-role="schema-builder"]');
+            if (!$builder.length) {
+                return null;
+            }
+
+            var values = {
+                name: String($builder.find('[data-role="schema-name"]').val() || '').trim(),
+                handle: String($builder.find('[data-role="schema-handle"]').val() || '').trim(),
+                description: String($builder.find('[data-role="schema-description"]').val() || '').trim(),
+                tags: [],
+                collectionHandle: String($builder.find('[data-role="schema-collection"]').val() || '').trim(),
+                collection: null,
+                fields: []
+            };
+
+            var rawTags = String($builder.find('[data-role="schema-tags"]').val() || '');
+            if (rawTags) {
+                values.tags = rawTags.split(',').map(function (tag) {
+                    return String(tag || '').trim();
+                }).filter(function (tag) {
+                    return tag !== '';
+                });
+            }
+
+            values.collection = this.findSchemaCollection(values.collectionHandle);
+
+            var $rows = $builder.find('[data-role="schema-field"]');
+            for (var i = 0; i < $rows.length; i++) {
+                var fieldData = this.getSchemaFieldDataFromRow($rows.eq(i));
+                if (fieldData) {
+                    values.fields.push(fieldData);
+                }
+            }
+
+            return values;
+        },
+
+        findSchemaCollection: function (handle) {
+            var needle = String(handle || '').trim();
+            if (!needle) {
+                return null;
+            }
+
+            for (var i = 0; i < this.schemaCollections.length; i++) {
+                var collection = this.schemaCollections[i];
+                if (collection && collection.handle === needle) {
+                    return $.extend({}, collection);
+                }
+            }
+
+            return null;
+        },
+
+        getSchemaFieldDataFromRow: function ($row) {
+            if (!$row || !$row.length) {
+                return null;
+            }
+
+            var name = String($row.find('[data-role="schema-field-name"]').val() || '').trim();
+            var handle = String($row.find('[data-role="schema-field-handle"]').val() || '').trim();
+            var type = String($row.find('[data-role="schema-field-type"]').val() || '').trim();
+            var description = String($row.find('[data-role="schema-field-description"]').val() || '').trim();
+
+            if (!name && !handle) {
+                return null;
+            }
+
+            if (!handle && name) {
+                handle = this.slugify(name);
+            }
+
+            return {
+                name: name || (handle ? handle : 'Поле'),
+                handle: handle,
+                type: type,
+                required: $row.find('[data-role="schema-field-required"]').is(':checked'),
+                localized: $row.find('[data-role="schema-field-localized"]').is(':checked'),
+                multiple: $row.find('[data-role="schema-field-multiple"]').is(':checked'),
+                description: description
+            };
+        },
+
+        collectSchemaFormData: function () {
+            var values = this.getSchemaFormValues();
+            if (!values) {
+                return null;
+            }
+
+            if (!values.name) {
+                this.showSchemaBuilderFeedback('danger', 'Укажите название схемы.');
+                return null;
+            }
+
+            if (!values.handle) {
+                values.handle = this.slugify(values.name);
+            }
+
+            if (!values.handle) {
+                this.showSchemaBuilderFeedback('danger', 'Укажите системный идентификатор схемы.');
+                return null;
+            }
+
+            if (!values.collection) {
+                this.showSchemaBuilderFeedback('danger', 'Выберите коллекцию, к которой относится схема.');
+                return null;
+            }
+
+            if (!values.fields.length) {
+                this.showSchemaBuilderFeedback('danger', 'Добавьте хотя бы одно поле в схему.');
+                return null;
+            }
+
+            var now = new Date();
+            var schemaId = this.schemaBuilderInitialId || ('schema-' + values.handle);
+
+            var schema = {
+                id: schemaId,
+                handle: values.handle,
+                name: values.name,
+                description: values.description,
+                tags: values.tags,
+                collection: values.collection,
+                fields: values.fields,
+                updatedIso: now.toISOString(),
+                updated: this.formatDateTimeLabel(now),
+                editUrl: this.buildSchemaEditorUrl(schemaId)
+            };
+
+            return {
+                schema: schema,
+                mode: this.schemaBuilderMode || 'create'
+            };
+        },
+
+        saveSchemaFromBuilder: function (options) {
+            options = options || {};
+            this.resetSchemaBuilderFeedback();
+
+            var $button = options.button ? $(options.button) : null;
+            if ($button && $button.length) {
+                $button.prop('disabled', true);
+            }
+
+            var result = this.collectSchemaFormData();
+            if (!result) {
+                if ($button && $button.length) {
+                    window.setTimeout(function () {
+                        $button.prop('disabled', false);
+                    }, 0);
+                }
+                return;
+            }
+
+            var normalized = this.normalizeSchemaDefinition(result.schema);
+            if (!normalized) {
+                this.showSchemaBuilderFeedback('danger', 'Не удалось подготовить данные схемы к сохранению.');
+                if ($button && $button.length) {
+                    window.setTimeout(function () {
+                        $button.prop('disabled', false);
+                    }, 0);
+                }
+                return;
+            }
+
+            this.storeSchemaPendingUpdate({
+                schema: normalized,
+                action: result.mode === 'edit' ? 'update' : 'create'
+            });
+
+            this.persistCustomSchema(normalized, true);
+
+            this.schemaBuilderInitialId = normalized.id;
+            this.schemaBuilderMode = 'edit';
+
+            if (options.redirect === false) {
+                this.showSchemaBuilderFeedback('success', 'Схема сохранена. Можно продолжать редактирование.');
+                if ($button && $button.length) {
+                    window.setTimeout(function () {
+                        $button.prop('disabled', false);
+                    }, 0);
+                }
+                this.updateSchemaBuilderPreview();
+                return;
+            }
+
+            this.showSchemaBuilderFeedback('success', 'Схема сохранена. Возвращаемся к списку…');
+
+            var redirectUrl = this.schemasIndexUrl || (this.schemaBuilderConfig && this.schemaBuilderConfig.indexUrl) || '/dashboard/schemas';
+            window.setTimeout(function () {
+                window.location.href = redirectUrl;
+            }, 800);
+        },
+
+        storeSchemaPendingUpdate: function (payload) {
+            if (!window.localStorage || !this.schemasPendingUpdateStorageKey) {
+                return;
+            }
+
+            try {
+                window.localStorage.setItem(this.schemasPendingUpdateStorageKey, JSON.stringify(payload));
+            } catch (error) {
+                console.warn('Не удалось сохранить состояние конструктора схем', error);
+            }
+        },
+
+        showSchemaBuilderFeedback: function (type, message) {
+            var $alert = $('[data-role="schema-builder-feedback"]');
+            if (!$alert.length) {
+                return;
+            }
+
+            var classes = 'alert-success alert-danger alert-info alert-warning';
+            var cssClass = 'alert-info';
+            if (type === 'success' || type === 'danger' || type === 'warning' || type === 'info') {
+                cssClass = 'alert-' + type;
+            }
+
+            $alert
+                .removeClass('hidden ' + classes)
+                .addClass(cssClass)
+                .text(message || '');
+        },
+
+        resetSchemaBuilderFeedback: function () {
+            var $alert = $('[data-role="schema-builder-feedback"]');
+            if (!$alert.length) {
+                return;
+            }
+
+            $alert.addClass('hidden').removeClass('alert-success alert-danger alert-info alert-warning').text('');
+        },
+
+        updateSchemaBuilderPreview: function () {
+            var values = this.getSchemaFormValues();
+            if (!values) {
+                return;
+            }
+
+            var $wrapper = $('[data-role="schema-builder-wrapper"]');
+            if (!$wrapper.length) {
+                return;
+            }
+
+            var $name = $wrapper.find('[data-role="schema-preview-name"]');
+            var $handle = $wrapper.find('[data-role="schema-preview-handle"]');
+            var $collection = $wrapper.find('[data-role="schema-preview-collection"]');
+            var $description = $wrapper.find('[data-role="schema-preview-description"]');
+            var $placeholder = $wrapper.find('[data-role="schema-preview-placeholder"]');
+            var $fieldsList = $wrapper.find('[data-role="schema-preview-fields"]');
+            var $count = $wrapper.find('[data-role="schema-preview-fields-count"]');
+
+            if ($name.length) {
+                $name.text(values.name || 'Новая схема');
+            }
+
+            if ($handle.length) {
+                $handle.text(values.handle ? '@' + values.handle : '—');
+            }
+
+            if ($collection.length) {
+                $collection.text(values.collection ? values.collection.name : '—');
+            }
+
+            if ($description.length) {
+                if (values.description) {
+                    $description.text(values.description).removeClass('hidden');
+                } else {
+                    $description.text('').addClass('hidden');
+                }
+            }
+
+            if ($count.length) {
+                $count.text(values.fields.length ? values.fields.length : '0');
+            }
+
+            if ($fieldsList.length) {
+                $fieldsList.empty();
+                if (!values.fields.length) {
+                    $fieldsList.append('<li class="list-group-item text-muted">Добавьте поля, чтобы увидеть структуру схемы.</li>');
+                } else {
+                    for (var i = 0; i < values.fields.length; i++) {
+                        var field = values.fields[i];
+                        var badges = [];
+                        if (field.type) {
+                            badges.push('<span class="label label-default">' + this.escapeHtml(field.type) + '</span>');
+                        }
+                        if (field.required) {
+                            badges.push('<span class="label label-warning">обязательное</span>');
+                        }
+                        if (field.localized) {
+                            badges.push('<span class="label label-info">локализация</span>');
+                        }
+                        if (field.multiple) {
+                            badges.push('<span class="label label-primary">множественное</span>');
+                        }
+                        var handle = field.handle ? ' <span class="text-muted">@' + this.escapeHtml(field.handle) + '</span>' : '';
+                        var description = field.description ? '<div class="text-muted small">' + this.escapeHtml(field.description) + '</div>' : '';
+                        $fieldsList.append('<li class="list-group-item">' +
+                            '<div class="schema-preview-field-header">' +
+                            '<strong>' + this.escapeHtml(field.name || 'Поле') + '</strong>' + handle +
+                            (badges.length ? '<span class="pull-right schema-field-badges">' + badges.join(' ') + '</span>' : '') +
+                            '</div>' +
+                            description +
+                            '</li>');
+                    }
+                }
+            }
+
+            if ($placeholder.length) {
+                if (values.fields.length) {
+                    $placeholder.addClass('hidden');
+                } else {
+                    $placeholder.removeClass('hidden');
+                }
+            }
+        },
+
+        findSchemaPreset: function (id) {
+            var needle = String(id || '');
+            if (!needle) {
+                return null;
+            }
+
+            for (var i = 0; i < this.schemaPresets.length; i++) {
+                var preset = this.schemaPresets[i];
+                if (!preset) {
+                    continue;
+                }
+                if (preset.id === needle) {
+                    return preset;
+                }
+                if (preset.schema && preset.schema.id === needle) {
+                    return preset;
+                }
+            }
+
+            return null;
+        },
+
+        applySchemaPreset: function (preset) {
+            if (!preset || !preset.schema) {
+                return;
+            }
+
+            var title = preset.name || preset.id || 'Пресет';
+            var proceed = window.confirm('Применить пресет «' + title + '»? Текущие изменения будут заменены.');
+            if (!proceed) {
+                return;
+            }
+
+            var schema = this.normalizeSchemaDefinition(preset.schema);
+            if (!schema) {
+                return;
+            }
+
+            if (this.schemaBuilderMode !== 'edit') {
+                schema.id = '';
+            } else if (this.schemaBuilderInitialId) {
+                schema.id = this.schemaBuilderInitialId;
+            }
+
+            this.populateSchemaForm(schema, { preserveId: this.schemaBuilderMode === 'edit' });
+            this.updateSchemaHandleAutoFill($('[data-role="schema-builder-wrapper"]'));
+            this.updateSchemaBuilderPreview();
+            this.showSchemaBuilderFeedback('info', 'Пресет «' + title + '» применён. Проверьте поля перед сохранением.');
+        },
+
+        findCustomSchemaById: function (id) {
+            var needle = String(id || '');
+            if (!needle) {
+                return null;
+            }
+
+            var candidates = [needle];
+            if (needle.indexOf('schema-') === 0) {
+                candidates.push(needle.substring(7));
+            } else {
+                candidates.push('schema-' + needle);
+            }
+
+            var dataset = this.customSchemasDataset || [];
+            for (var i = 0; i < dataset.length; i++) {
+                var schema = dataset[i];
+                if (!schema) {
+                    continue;
+                }
+
+                var schemaId = schema.id ? String(schema.id) : '';
+                var schemaHandle = schema.handle ? String(schema.handle) : '';
+                if (schemaId && candidates.indexOf(schemaId) !== -1) {
+                    return $.extend(true, {}, schema);
+                }
+                if (schemaHandle && (candidates.indexOf(schemaHandle) !== -1 || candidates.indexOf('schema-' + schemaHandle) !== -1)) {
+                    return $.extend(true, {}, schema);
+                }
+            }
+
+            return null;
         },
 
         getSelectedCollections: function () {
